@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+    db:
+        image: postgres:16-alpine
+        container_name: postgres_db_collaboratif
+        restart: always
+
+        environment:
+            POSTGRES_USER: ${DB_USER}
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+            POSTGRES_DB: ${DB_NAME}
+
+        ports:
+            - "5432:5432"
+
+        volumes:
+            - pg_data:/var/lib/postgresql/data
+            - ./init_scripts:/docker-entrypoint-initdb.d # Montage du script d'initialisation
+
+    api:
+        build:
+            context: ./backend-api
+            dockerfile: Dockerfile
+        container_name: app_backend_api
+        restart: always
+        ports:
+            - "3000:3000"
+        env_file:
+            - ./.env
+        depends_on:
+            - db
+        volumes:
+            - ./backend-api:/app
+            - /app/node_modules
+
+    websocket:
+        build:
+            context: ./backend-ws
+            dockerfile: Dockerfile
+        container_name: app_backend_ws
+        restart: always
+        ports:
+            - "3001:3001"
+        env_file:
+            - ./.env
+        depends_on:
+            - db
+        volumes:
+            - ./backend-ws:/app
+            - /app/node_modules
+
+volumes:
+    pg_data:
