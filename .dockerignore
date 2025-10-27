@@ -1,0 +1,26 @@
+# Fichiers de configuration spécifiques au développeur
+.env
+.DS_Store
+.vscode
+.idea
+npm-debug.log*
+
+# Fichiers générés par Node.js/npm
+node_modules
+/backend-api/node_modules # S'assurer que le dossier local n'est pas copié
+/backend-ws/node_modules
+
+# Dossiers générés par TypeScript/compilateurs
+/backend-api/dist
+/backend-api/build
+/backend-ws/dist
+/backend-ws/build
+/frontend/dist
+/frontend/build
+
+# Cache, logs et fichiers temporaires
+logs
+tmp
+temp
+*.log
+*.tmp
