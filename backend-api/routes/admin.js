@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const pool = require("../db");
+const bcrypt = require("bcrypt");
 
 /**
  * @openapi
@@ -78,9 +80,36 @@ router.get("/users", (req, res) =>
  *                 role:
  *                   type: string
  */
-router.post("/users", (req, res) =>
-    res.status(201).json({ id: "u2", email: "n@x.y", role: "user" })
-);
+router.post("/users", async (req, res) => {
+  try {
+    const { email, password, role = "user" } = req.body;
+
+    // Validation basique
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email et password requis" });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password minimum 8 caractères" });
+    }
+
+    // Hasher le mot de passe avec bcrypt (salt rounds = 10)
+    const password_hash = await bcrypt.hash(password, 10);
+
+    // Insérer l'utilisateur avec le hash
+    const result = await pool.query(
+      `INSERT INTO "users" (email, password_hash, role)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, role`,
+      [email, password_hash, role]
+    );
+
+    const user = result.rows[0];
+    res.status(201).json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: err.message });
+  }
+});
 
 /**
  * @openapi

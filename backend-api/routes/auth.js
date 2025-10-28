@@ -23,13 +23,22 @@ const router = express.Router();
  *               $ref: '#/components/schemas/AuthResponse'
  *       '401': { $ref: '#/components/responses/UnauthorizedError' }
  */
-router.post("/login", (req, res) =>{ 
+router.post("/login", (req, res) => {
+  const { email, password } = req.body;
 
-    //creation du token et stockage de celui-ci en cookie
-    const token = jwt.sign({ userEmail }, process.env.JWT_SECRET, { expiresIn: 60 * 60 })
-    res.cookie("token", token, { httpOnly: true, secure: true})
+  // Validation basique
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email et password requis" });
+  }
 
-    res.json({ token: token, user: { id: "u1", email: "x@y.z" } })
+  // TODO: Vérifier l'email et le password en base de données
+  // Pour l'instant, accepter n'importe quel email/password
+
+  // Création du token
+  const token = jwt.sign({ userEmail: email }, process.env.JWT_SECRET, { expiresIn: 60 * 60 });
+  res.cookie("token", token, { httpOnly: true, secure: true });
+
+  res.json({ token: token, user: { id: "u1", email: email } });
 });
 
 /**
