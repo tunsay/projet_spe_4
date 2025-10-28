@@ -10,20 +10,25 @@ const httpServer = createServer(app);
 const io = new Server(httpServer);
 
 io.on("connection", (socket) => {
-  console.log("a user connected");
-  
-  socket.on("message", (msg) => {
-    console.log("message received: " + msg);
-    socket.send("Echo: " + msg);
-  });
+    console.log("a user connected");
 
-  socket.on("disconnect", () => {
-    console.log("user disconnected");
-  });
+    socket.on("message", (msg) => {
+        console.log("message received: " + msg);
+        socket.send("Echo: " + msg);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("user disconnected");
+    });
+});
+
+app.get("/", (req, res) => {
+    console.log("GET /");
+    res.send("WebSocket server is running.");
 });
 
 httpServer.listen(process.env.PORT || 3005, () => {
-  console.log("process.env.PORT", process.env.PORT);
+    console.log("process.env.PORT", process.env.PORT);
 });
 
 
