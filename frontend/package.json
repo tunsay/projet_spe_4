@@ -3,15 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "PORT=8081 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "child_process": "^1.0.2",
-    "next": "16.0.0",
     "path": "^0.12.7",
+    "dotenv-load": "^3.0.0",
+    "next": "16.0.0",
+    "next-env": "^1.1.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -20,8 +22,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+<<<<<<< HEAD
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
+=======
+>>>>>>> bryan
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
     "tailwindcss": "^4",

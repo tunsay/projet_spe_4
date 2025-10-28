@@ -13,7 +13,6 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger.js");
-const cookieParser = require("cookie-parser");
 
 const auth = require("./middleware/auth.js"); // Middleware d'authentification principal (JWT ou Token de test)
 const adminAuth = require("./middleware/adminAuth.js"); // Middleware d'authentification admin

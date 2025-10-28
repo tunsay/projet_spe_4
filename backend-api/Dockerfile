@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Définir l'environnement pour la production
 ENV NODE_ENV=production
