@@ -7,7 +7,7 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   host: process.env.DB_HOST,
-  port: 5432,
+  port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME,
 });
 
@@ -18,7 +18,7 @@ const sequelize = new Sequelize(
   process.env.DB_PASSWORD,
   {
     host: process.env.DB_HOST,
-    port: 5432,
+    port: process.env.DB_PORT || 5432,
     dialect: "postgres",
     logging: false, // Mettez à console.log pour les logs SQL
   }
