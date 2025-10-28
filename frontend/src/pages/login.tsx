@@ -1,5 +1,5 @@
 "use client"
-
+import "../app/globals.css";
 import { useState } from "react";
 
 export default function Page() {
@@ -20,7 +20,7 @@ export default function Page() {
     setIsLoading(true);
     try {
       // Replace the URL below with your real auth endpoint when available.
-      const res = await fetch(process.env.API_URL + "/api/auth/login", {
+      const res = await fetch(process.env.NEXT_API_URL + "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

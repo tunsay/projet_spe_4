@@ -7,6 +7,5 @@ export default function Page({
   params: Promise<{ slug: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  redirect("/login");
-  return null;
+  return <h1>My Page</h1>
 }
