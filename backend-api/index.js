@@ -2,6 +2,7 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger.js");
+const cookieParser = require("cookie-parser");
 
 // Routers
 const authRoutes = require("./routes/auth.js");
@@ -10,6 +11,7 @@ const adminRoutes = require("./routes/admin.js");
 const documentRoutes = require("./routes/documents.js");
 
 const app = express();
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -43,15 +45,19 @@ app.use("/api-docs", swaggerUi.serveFiles(swaggerSpec, {}), (_req, res) => {
 </body></html>`);
 });
 
+//verification de la connexion
+const auth = require("./middleware/auth.js")
+const adminAuth = require("./middleware/adminAuth.js")
+
 // Health
 app.get("/", (_req, res) => res.status(200).send("API Server is Running"));
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
 // Routes API montées sous /api
 app.use("/api/auth", authRoutes);
-app.use("/api/profile", profileRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/documents", documentRoutes);
+app.use("/api/profile", auth, profileRoutes);
+app.use("/api/admin", adminAuth, adminRoutes);
+app.use("/api/documents", auth, documentRoutes);
 
 // 404 API
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not Found" }));
