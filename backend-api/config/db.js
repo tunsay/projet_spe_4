@@ -3,6 +3,7 @@ const { Sequelize } = require("sequelize");
 
 // Les informations de connexion sont généralement dans process.env
 // Assurez-vous qu'elles sont définies dans Docker/docker-compose.yml
+
 const sequelize = new Sequelize(
     process.env.DB_NAME, // Nom de la BDD
     process.env.DB_USER, // Utilisateur

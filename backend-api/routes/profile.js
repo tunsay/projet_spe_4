@@ -95,8 +95,44 @@ router.put("/", (req, res) =>
  *                   type: string
  *                   description: Data URL PNG
  */
-router.post("/2fa-setup", (req, res) =>
-    res.json({ secret: "BASE32...", qr: "data:image/png;base64,..." })
+router.post("/2fa-setup", authenticateToken, userController.setupTwoFactor);
+
+/**
+ * @openapi
+ * /profile/2fa-activate:
+ *   post:
+ *     summary: Vérifie le code TOTP et active définitivement le 2FA.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Code TOTP à 6 chiffres de l'application d'authentification.
+ *                 example: "123456"
+ *     responses:
+ *       '200':
+ *         description: 2FA activé avec succès.
+ *       '400':
+ *         description: Code TOTP manquant, configuration non lancée, ou 2FA déjà actif.
+ *       '401':
+ *         description: Non autorisé.
+ *       '440':
+ *         description: Code TOTP invalide (code personnalisé du contrôleur).
+ */
+router.post(
+    "/2fa-activate",
+    authenticateToken,
+    userController.activateTwoFactor
 );
 
 module.exports = router;

@@ -1,25 +1,63 @@
-// backend-api/index.js
+const path = require("path");
+const fs = require("fs");
+
+// Définir le chemin vers le .env (un niveau au-dessus de backend-api/)
+const dotenvPath = path.resolve(__dirname, "..", ".env");
+if (fs.existsSync(dotenvPath)) {
+    // Charger les variables d'environnement si le fichier est trouvé
+    require("dotenv").config({ path: dotenvPath });
+}
+
 const express = require("express");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger.js");
-require("dotenv").config();
-const cookieParser = require("cookie-parser");
 
-// Routers
+const auth = require("./middleware/auth.js"); // Middleware d'authentification principal (JWT ou Token de test)
+const adminAuth = require("./middleware/adminAuth.js"); // Middleware d'authentification admin
+
 const authRoutes = require("./routes/auth.js");
 const profileRoutes = require("./routes/profile.js");
 const adminRoutes = require("./routes/admin.js");
 const documentRoutes = require("./routes/documents.js");
 
 const app = express();
+
+console.log(`DB_USER: ${process.env.DB_USER}`); // Ligne de débogage pour confirmer le chargement du .env
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ---- UNIQUE source pour l’UI : la spec live ----
+// --- Configuration CORS ---
+const CORS_ORIGINS = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "http://localhost:8081",
+    "http://127.0.0.1:3000",
+];
+
+app.use(
+    cors({
+        origin: CORS_ORIGINS,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-User-ID-Test"],
+        // Utilisez 'true' si vous gérez l'authentification par cookies
+        credentials: true,
+    })
+);
+
+// Gestion des requêtes OPTIONS (pre-flight CORS)
+app.use((req, res, next) => {
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+});
+
+// --- Documentation Swagger ---
 app.get("/openapi.json", (_req, res) => res.json(swaggerSpec));
 
-// ---- Swagger UI : charge UNIQUEMENT /openapi.json ----
 app.use("/api-docs", swaggerUi.serveFiles(swaggerSpec, {}), (_req, res) => {
     res.send(`<!doctype html>
 <html><head>
@@ -32,7 +70,7 @@ app.use("/api-docs", swaggerUi.serveFiles(swaggerSpec, {}), (_req, res) => {
   <script>
   window.onload = () => {
     window.ui = SwaggerUIBundle({
-      url: '/openapi.json?_=' + Date.now(), // cache-bust
+      url: '/openapi.json?_=' + Date.now(),
       dom_id: '#swagger-ui',
       deepLinking: true,
       displayRequestDuration: true,
@@ -46,25 +84,23 @@ app.use("/api-docs", swaggerUi.serveFiles(swaggerSpec, {}), (_req, res) => {
 </body></html>`);
 });
 
-//verification de la connexion
-const auth = require("./middleware/auth.js")
-const adminAuth = require("./middleware/adminAuth.js")
-
-// Health
+// --- Routes Générales ---
 app.get("/", (_req, res) => res.status(200).send("API Server is Running"));
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
-// Routes API montées sous /api
-app.use("/api/auth", authRoutes);
-app.use("/api/profile", auth, profileRoutes);
-app.use("/api/admin", adminAuth, adminRoutes);
-app.use("/api/documents", auth, documentRoutes);
+// --- Routes API ---
+app.use("/api/auth", authRoutes); // Authentification (login, register)
 
-// 404 API
+// Correction: Le middleware 'auth' est manquant sur /api/profile dans l'ancienne version.
+// Il est essentiel pour toutes les routes de profil qui nécessitent l'utilisateur connecté.
+app.use("/api/profile", profileRoutes); // Profil utilisateur (nécessite d'être connecté)
+
+app.use("/api/admin", adminAuth, adminRoutes); // Routes d'administration (nécessite d'être admin)
+app.use("/api/documents", auth, documentRoutes); // Routes de documents (nécessite d'être connecté)
+
+// --- Gestion des Erreurs et 404 ---
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not Found" }));
 
-// Errors
-// eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
     console.error("[error]", err);
     res.status(err.status || 500).json({
