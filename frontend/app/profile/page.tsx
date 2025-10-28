@@ -19,7 +19,7 @@ interface TwoFaSetupResponse {
 type ErrorType = Error | { message: string };
 
 const API_URL = "http://localhost:3000/api/profile";
-const TEST_USER_ID = "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22";
+const TEST_USER_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
 
 export default function ProfilePage() {
     const [profile, setProfile] = useState<UserProfile | null>(null);
