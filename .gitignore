@@ -74,6 +74,8 @@ frontend/package-lock.json
 backend-api/package-lock.json
 backend-api/yarn.lock
 frontend/yarn.lock
+backend-api/uploads/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

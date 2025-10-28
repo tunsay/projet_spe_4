@@ -1,6 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const { pool } = require("../config/db");
+const multer = require("multer");
+const path = require("path");
+
+// Configuration multer pour l'upload
+const upload = multer({ 
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+});
 
 /**
  * @openapi
@@ -84,12 +92,6 @@ router.get("/", async (req, res) => {
  */
 router.delete("/:id", (req, res) => res.status(204).send());
 
-// Configuration multer pour l'upload
-const upload = multer({ 
-  dest: "uploads/",
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
-});
-
 /**
  * @openapi
  * /documents/file:
@@ -140,7 +142,20 @@ router.post("/file", upload.single("file"), async (req, res) => {
     }
 
     const { parent_id } = req.body;
-    const owner_id = req.headers["user-id"] || "default-user-id";
+    
+    // Récupérer l'owner_id depuis le token JWT ou header
+    let owner_id = req.headers["user-id"];
+    
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    // Valider que c'est un UUID valide
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(owner_id)) {
+      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
+    }
+
     const fileName = req.file.originalname;
     const mimeType = req.file.mimetype;
     const filePath = req.file.path;
