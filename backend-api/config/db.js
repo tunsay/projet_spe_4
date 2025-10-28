@@ -1,41 +1,31 @@
-// backend-api/config/db.js
 const { Sequelize } = require("sequelize");
+require("dotenv").config({ path: "../../.env" });
 
-// Les informations de connexion sont généralement dans process.env
-// Assurez-vous qu'elles sont définies dans Docker/docker-compose.yml
+// Pool PostgreSQL brut (si vous en avez besoin ailleurs)
+const { Pool } = require("pg");
+const pool = new Pool({
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST,
+  port: 5432,
+  database: process.env.DB_NAME,
+});
 
+// Instance Sequelize
 const sequelize = new Sequelize(
-    process.env.DB_NAME, // Nom de la BDD
-    process.env.DB_USER, // Utilisateur
-    process.env.DB_PASSWORD, // Mot de passe
-    {
-        host: process.env.DB_HOST || "localhost", // Nom du service DB dans Docker
-        dialect: "postgres",
-        logging: false, // Mettez à true pour voir les requêtes SQL générées
-        pool: {
-            max: 5,
-            min: 0,
-            acquire: 30000,
-            idle: 10000,
-        },
-    }
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST,
+    port: 5432,
+    dialect: "postgres",
+    logging: false, // Mettez à console.log pour les logs SQL
+  }
 );
 
-// Tente de se connecter à la base de données
-const connectDB = async () => {
-    try {
-        await sequelize.authenticate();
-        console.log("Connexion à la base de données réussie avec Sequelize.");
-        // Optionnel : synchroniser les modèles (uniquement pour le développement initial)
-        // await sequelize.sync();
-    } catch (error) {
-        console.error(
-            "Impossible de se connecter à la base de données:",
-            error
-        );
-        // Quitter si la connexion échoue
-        process.exit(1);
-    }
+// Export des deux (Sequelize ET pool brut)
+module.exports = {
+  sequelize,
+  pool,
 };
-
-module.exports = { sequelize, connectDB };
