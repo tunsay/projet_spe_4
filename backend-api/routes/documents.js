@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { pool } = require("../config/db");
 
 /**
  * @openapi
@@ -27,10 +28,42 @@ const router = express.Router();
  *                     enum:
  *                       - file
  *                       - folder
+ *                   owner_id:
+ *                     type: string
+ *                   created_at:
+ *                     type: string
  */
-router.get("/", (req, res) =>
-    res.json([{ id: "d1", name: "Doc", type: "file" }])
-);
+router.get("/", async (req, res) => {
+  try {
+    // Récupérer les documents (racine - parent_id IS NULL)
+    const result = await pool.query(
+      `SELECT 
+        d.id, 
+        d.name, 
+        d.type, 
+        d.owner_id, 
+        d.created_at,
+        d.mime_type
+      FROM "documents" d
+      WHERE d.parent_id IS NULL
+      ORDER BY d.created_at DESC`
+    );
+
+    const documents = result.rows.map((doc) => ({
+      id: doc.id,
+      name: doc.name,
+      type: doc.type,
+      owner_id: doc.owner_id,
+      mime_type: doc.mime_type,
+      created_at: doc.created_at,
+    }));
+
+    res.status(200).json(documents);
+  } catch (err) {
+    console.error("Erreur récupération documents:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
@@ -51,6 +84,12 @@ router.get("/", (req, res) =>
  */
 router.delete("/:id", (req, res) => res.status(204).send());
 
+// Configuration multer pour l'upload
+const upload = multer({ 
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+});
+
 /**
  * @openapi
  * /documents/file:
@@ -68,6 +107,9 @@ router.delete("/:id", (req, res) => res.status(204).send());
  *               file:
  *                 type: string
  *                 format: binary
+ *               parent_id:
+ *                 type: string
+ *                 description: ID du dossier parent (optionnel)
  *     responses:
  *       '201':
  *         description: Créé
@@ -82,10 +124,51 @@ router.delete("/:id", (req, res) => res.status(204).send());
  *                   type: string
  *                 type:
  *                   type: string
+ *                 mime_type:
+ *                   type: string
+ *                 owner_id:
+ *                   type: string
+ *                 created_at:
+ *                   type: string
+ *       '400':
+ *         description: Fichier manquant
  */
-router.post("/file", (req, res) =>
-    res.status(201).json({ id: "f1", name: "file.pdf", type: "file" })
-);
+router.post("/file", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Fichier requis" });
+    }
+
+    const { parent_id } = req.body;
+    const owner_id = req.headers["user-id"] || "default-user-id";
+    const fileName = req.file.originalname;
+    const mimeType = req.file.mimetype;
+    const filePath = req.file.path;
+
+    // Insérer le document en base de données
+    const result = await pool.query(
+      `INSERT INTO "documents" 
+       (name, type, mime_type, file_path, owner_id, parent_id, content, last_modified_by_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, '', $5)
+       RETURNING id, name, type, mime_type, owner_id, created_at`,
+      [fileName, "file", mimeType, filePath, owner_id, parent_id || null]
+    );
+
+    const document = result.rows[0];
+
+    res.status(201).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      mime_type: document.mime_type,
+      owner_id: document.owner_id,
+      created_at: document.created_at,
+    });
+  } catch (err) {
+    console.error("Erreur upload fichier:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
