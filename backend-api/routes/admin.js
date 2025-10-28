@@ -30,10 +30,31 @@ const bcrypt = require("bcrypt");
  *                     enum:
  *                       - user
  *                       - admin
+ *                   display_name:
+ *                     type: string
+ *                   is_blocked:
+ *                     type: boolean
  */
-router.get("/users", (req, res) =>
-    res.json([{ id: "u1", email: "a@b.c", role: "user" }])
-);
+router.get("/users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, email, role, display_name, is_blocked FROM "users" ORDER BY created_at DESC`
+    );
+
+    const users = result.rows.map((user) => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      display_name: user.display_name,
+      is_blocked: user.is_blocked,
+    }));
+
+    res.status(200).json(users);
+  } catch (err) {
+    console.error("Erreur récupération users:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
@@ -126,9 +147,55 @@ router.post("/users", async (req, res) => {
  *           type: string
  *     responses:
  *       '200':
- *         description: OK
+ *         description: Utilisateur bloqué avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 id:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                 is_blocked:
+ *                   type: boolean
+ *       '404':
+ *         description: Utilisateur non trouvé
  */
-router.put("/users/:id/block", (req, res) => res.json({}));
+router.put("/users/:id/block", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que l'utilisateur existe
+    const userCheck = await pool.query(
+      `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
+      [id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    // Mettre à jour is_blocked à true
+    const result = await pool.query(
+      `UPDATE "users" SET is_blocked = true WHERE id = $1 RETURNING id, email, is_blocked`,
+      [id]
+    );
+
+    const user = result.rows[0];
+    res.status(200).json({
+      message: "Utilisateur bloqué avec succès",
+      id: user.id,
+      email: user.email,
+      is_blocked: user.is_blocked,
+    });
+  } catch (err) {
+    console.error("Erreur blocage user:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
@@ -145,9 +212,55 @@ router.put("/users/:id/block", (req, res) => res.json({}));
  *           type: string
  *     responses:
  *       '200':
- *         description: OK
+ *         description: Utilisateur débloqué avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 id:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                 is_blocked:
+ *                   type: boolean
+ *       '404':
+ *         description: Utilisateur non trouvé
  */
-router.put("/users/:id/unblock", (req, res) => res.json({}));
+router.put("/users/:id/unblock", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que l'utilisateur existe
+    const userCheck = await pool.query(
+      `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
+      [id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    // Mettre à jour is_blocked à false
+    const result = await pool.query(
+      `UPDATE "users" SET is_blocked = false WHERE id = $1 RETURNING id, email, is_blocked`,
+      [id]
+    );
+
+    const user = result.rows[0];
+    res.status(200).json({
+      message: "Utilisateur débloqué avec succès",
+      id: user.id,
+      email: user.email,
+      is_blocked: user.is_blocked,
+    });
+  } catch (err) {
+    console.error("Erreur déblocage user:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 
 /**
