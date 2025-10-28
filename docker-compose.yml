@@ -50,5 +50,19 @@ services:
             - ./backend-ws:/app
             - /app/node_modules
 
+    # Production frontend (built image)
+    front:
+        build:
+            context: ./frontend
+            dockerfile: Dockerfile
+        container_name: app_frontend
+        restart: always
+        environment:
+            - NODE_ENV=production
+        ports:
+            - "8080:3000"
+        depends_on:
+            - api
+
 volumes:
     pg_data:

@@ -1,4 +1,5 @@
 const express = require("express");
+const jwt = require("jsonwebtoken")
 const router = express.Router();
 
 /**
@@ -22,9 +23,14 @@ const router = express.Router();
  *               $ref: '#/components/schemas/AuthResponse'
  *       '401': { $ref: '#/components/responses/UnauthorizedError' }
  */
-router.post("/login", (req, res) =>
-    res.json({ token: "jwt", user: { id: "u1", email: "x@y.z" } })
-);
+router.post("/login", (req, res) =>{ 
+
+    //creation du token et stockage de celui-ci en cookie
+    const token = jwt.sign({ userEmail }, process.env.JWT_SECRET, { expiresIn: 60 * 60 })
+    res.cookie("token", token, { httpOnly: true, secure: true})
+
+    res.json({ token: token, user: { id: "u1", email: "x@y.z" } })
+});
 
 /**
  * @openapi
