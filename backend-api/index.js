@@ -2,6 +2,7 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger.js");
+require("dotenv").config();
 const cookieParser = require("cookie-parser");
 
 // Routers

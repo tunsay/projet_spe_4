@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 
+const userController = require("../controllers/userController");
+const { authenticateToken } = require("../middleware/authMiddleware");
+
 /**
  * @openapi
  * /profile:
@@ -26,9 +29,7 @@ const router = express.Router();
  *       '401':
  *         description: Non autorisé
  */
-router.get("/", (req, res) =>
-    res.json({ id: "u1", name: "Alice", email: "a@b.c" })
-);
+router.get("/", authenticateToken, userController.getUserProfile);
 
 /**
  * @openapi
