@@ -57,7 +57,7 @@ app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 // Routes API montées sous /api
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", auth, profileRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/api/admin", adminAuth, adminRoutes);
 app.use("/api/documents", auth, documentRoutes);
 
 // 404 API
