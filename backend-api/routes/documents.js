@@ -15,7 +15,7 @@ const upload = multer({
  * @openapi
  * /documents:
  *   get:
- *     summary: Liste des dossiers et fichiers accessibles
+ *     summary: Liste des dossiers et fichiers accessibles avec hiérarchie
  *     tags:
  *       - Documents
  *     responses:
@@ -37,42 +37,233 @@ const upload = multer({
  *                     enum:
  *                       - file
  *                       - folder
+ *                       - text
  *                   owner_id:
+ *                     type: string
+ *                   parent_id:
  *                     type: string
  *                   created_at:
  *                     type: string
+ *                   mime_type:
+ *                     type: string
+ *                   children:
+ *                     type: array
+ *                     description: Enfants du dossier (récursif)
  */
 router.get("/", async (req, res) => {
   try {
-    // Récupérer les documents (racine - parent_id IS NULL)
-    const result = await pool.query(
-      `SELECT 
-        d.id, 
-        d.name, 
-        d.type, 
-        d.owner_id, 
-        d.created_at,
-        d.mime_type
-      FROM "documents" d
-      WHERE d.parent_id IS NULL
-      ORDER BY d.created_at DESC`
-    );
+    // Fonction récursive pour construire la hiérarchie
+    const buildHierarchy = async (parentId) => {
+      const result = await pool.query(
+        `SELECT 
+          d.id, 
+          d.name, 
+          d.type, 
+          d.owner_id, 
+          d.parent_id,
+          d.created_at,
+          d.mime_type
+        FROM "documents" d
+        WHERE d.parent_id ${parentId ? "= $1" : "IS NULL"}
+        ORDER BY d.created_at DESC`,
+        parentId ? [parentId] : []
+      );
 
-    const documents = result.rows.map((doc) => ({
-      id: doc.id,
-      name: doc.name,
-      type: doc.type,
-      owner_id: doc.owner_id,
-      mime_type: doc.mime_type,
-      created_at: doc.created_at,
-    }));
+      const documents = [];
+      for (const doc of result.rows) {
+        const docObj = {
+          id: doc.id,
+          name: doc.name,
+          type: doc.type,
+          owner_id: doc.owner_id,
+          parent_id: doc.parent_id,
+          created_at: doc.created_at,
+        };
 
+        // Ajouter mime_type seulement pour les fichiers
+        if (doc.type === "file") {
+          docObj.mime_type = doc.mime_type;
+        }
+
+        // Si c'est un dossier, récursivement récupérer ses enfants
+        if (doc.type === "folder") {
+          docObj.children = await buildHierarchy(doc.id);
+        }
+
+        documents.push(docObj);
+      }
+
+      return documents;
+    };
+
+    const documents = await buildHierarchy(null);
     res.status(200).json(documents);
   } catch (err) {
     console.error("Erreur récupération documents:", err);
     res.status(500).json({ error: "Erreur serveur interne" });
   }
 });
+
+/**
+ * @openapi
+ * /documents:
+ *   post:
+ *     summary: Crée un dossier ou un document textuel
+ *     tags:
+ *       - Documents
+ *     parameters:
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - type
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Nom du dossier ou document
+ *               type:
+ *                 type: string
+ *                 enum:
+ *                   - folder
+ *                   - text
+ *               content:
+ *                 type: string
+ *                 description: Contenu textuel (requis si type=text)
+ *               parent_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID du dossier parent (optionnel)
+ *     responses:
+ *       '201':
+ *         description: Créé avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                 owner_id:
+ *                   type: string
+ *                 parent_id:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                 created_at:
+ *                   type: string
+ *       '400':
+ *         description: Données invalides
+ *       '401':
+ *         description: User ID requis
+ *       '404':
+ *         description: Parent ou utilisateur non trouvé
+ */
+router.post("/", async (req, res) => {
+  try {
+    const owner_id = req.headers["user-id"];
+    const { name, type, content, parent_id } = req.body;
+
+    // Vérifier que owner_id est fourni
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    // Vérifier les données requises
+    if (!name || !type) {
+      return res.status(400).json({ error: "Nom et type sont requis" });
+    }
+
+    // Valider le type
+    if (!["folder", "text"].includes(type)) {
+      return res.status(400).json({ error: "Type invalide (folder ou text)" });
+    }
+
+    // Valider owner_id UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(owner_id)) {
+      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier que l'utilisateur existe
+    const userCheck = await pool.query(
+      `SELECT id FROM "users" WHERE id = $1`,
+      [owner_id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    // Si type est 'text', le contenu est requis
+    if (type === "text" && !content) {
+      return res.status(400).json({ error: "Contenu requis pour un document textuel" });
+    }
+
+    // Valider parent_id si fourni
+    let validatedParentId = null;
+    if (parent_id && parent_id.trim() !== "") {
+      if (!uuidRegex.test(parent_id)) {
+        return res.status(400).json({ error: "Parent ID invalide (doit être un UUID)" });
+      }
+
+      // Vérifier que le parent existe et est un dossier
+      const parentCheck = await pool.query(
+        `SELECT id, type FROM "documents" WHERE id = $1`,
+        [parent_id]
+      );
+
+      if (parentCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Dossier parent non trouvé" });
+      }
+
+      if (parentCheck.rows[0].type !== "folder") {
+        return res.status(400).json({ error: "Le parent doit être un dossier" });
+      }
+
+      validatedParentId = parent_id;
+    }
+
+    // Insérer le document en base de données
+    const result = await pool.query(
+      `INSERT INTO "documents" 
+       (name, type, content, owner_id, parent_id, last_modified_by_id, last_modified_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id, name, type, owner_id, parent_id, content, created_at`,
+      [name, type, content || null, owner_id, validatedParentId, owner_id]
+    );
+
+    const document = result.rows[0];
+
+    res.status(201).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      owner_id: document.owner_id,
+      parent_id: document.parent_id,
+      content: document.content,
+      created_at: document.created_at,
+    });
+  } catch (err) {
+    console.error("Erreur création document:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
 
 /**
  * @openapi
