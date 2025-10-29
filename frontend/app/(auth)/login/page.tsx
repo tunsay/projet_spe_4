@@ -68,7 +68,20 @@ export default function LoginPage() {
                 const errorMessage = await extractErrorMessage(response, null);
                 setError(errorMessage);
             } else {
-                // Succès de la connexion : rediriger vers la page 2FA par défaut ou le dashboard
+                // Succès de la connexion : stocker le token non httpOnly pour les connexions WebSocket
+                try {
+                    const data = await response.json();
+                    if (data && typeof data.token === "string") {
+                        window.localStorage.setItem(
+                            "collaboratif_token",
+                            data.token
+                        );
+                    }
+                } catch {
+                    // Certaines implémentations 2FA peuvent renvoyer un 204 - ignorer silencieusement
+                }
+
+                // Redirection page 2FA (flux existant)
                 router.replace("/profile/2fa");
             }
         } catch (err) {

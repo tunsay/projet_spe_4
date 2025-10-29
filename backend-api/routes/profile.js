@@ -135,4 +135,23 @@ router.post("/2fa-setup", userController.setupTwoFactor);
  */
 router.post("/2fa-activate", userController.activateTwoFactor);
 
+/**
+ * @openapi
+ * /profile/2fa-disable:
+ *   post:
+ *     summary: Désactive l'authentification à deux facteurs pour l'utilisateur connecté.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: 2FA désactivé avec succès.
+ *       '400':
+ *         description: 2FA non actif.
+ *       '401':
+ *         description: Non autorisé.
+ */
+router.post("/2fa-disable", userController.disableTwoFactor);
+
 module.exports = router;

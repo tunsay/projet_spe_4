@@ -136,6 +136,39 @@ const activateTwoFactor = async (req, res) => {
 };
 
 /**
+ * Désactive le 2FA pour l'utilisateur connecté.
+ */
+const disableTwoFactor = async (req, res) => {
+    const userId = req.userId;
+
+    try {
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé." });
+        }
+
+        if (!user.is_two_factor_enabled) {
+            return res.status(400).json({
+                message: "Le 2FA n'est pas activé pour cet utilisateur.",
+            });
+        }
+
+        user.is_two_factor_enabled = false;
+        user.two_factor_secret = null;
+        await user.save();
+
+        return res.status(200).json({
+            message: "Authentification à deux facteurs désactivée avec succès.",
+            isTwoFactorEnabled: false,
+        });
+    } catch (error) {
+        console.error("Erreur lors de la désactivation 2FA:", error);
+        return res.status(500).json({ message: "Erreur serveur interne." });
+    }
+};
+
+/**
  * Met à jour le profil de l'utilisateur (nom, mot de passe)
  */
 const updateUserProfile = async (req, res) => {
@@ -192,5 +225,6 @@ module.exports = {
     getUserProfile,
     setupTwoFactor,
     activateTwoFactor,
+    disableTwoFactor,
     updateUserProfile
 };

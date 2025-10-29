@@ -595,6 +595,63 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+router.get("/:id/download", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inline = req.query.inline === "1" || req.query.inline === "true";
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    const result = await pool.query(
+      `SELECT id, name, type, content FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const document = result.rows[0];
+
+    if (document.type === "folder") {
+      return res.status(400).json({ error: "Les dossiers ne peuvent pas être téléchargés." });
+    }
+
+    if (document.type === "file") {
+      const params = new URLSearchParams();
+      if (inline) {
+        params.set("inline", "1");
+      }
+      const query = params.toString();
+      return res.redirect(
+        302,
+        `/api/documents/file/${document.id}/download${query ? `?${query}` : ""}`
+      );
+    }
+
+    let filename = path.basename(document.name || "document");
+    if (!filename.includes(".")) {
+      filename = `${filename}.txt`;
+    }
+    const encodedFilename = encodeURIComponent(filename);
+    const disposition = inline ? "inline" : "attachment";
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `${disposition}; filename="${filename.replace(/"/g, "_")}"; filename*=UTF-8''${encodedFilename}`
+    );
+
+    return res.status(200).send(document.content || "");
+  } catch (err) {
+    console.error("Erreur export document:", err);
+    return res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
 /**
  * @openapi
  * /documents/{id}:
@@ -1081,6 +1138,52 @@ router.post("/file", upload.single("file"), async (req, res) => {
   } catch (err) {
     console.error("Erreur upload fichier:", err);
     res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
+router.get("/file/:id/download", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inline = req.query.inline === "1" || req.query.inline === "true";
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    const result = await pool.query(
+      `SELECT name, mime_type, file_path, type FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const document = result.rows[0];
+
+    if (document.type !== "file" || !document.file_path) {
+      return res.status(400).json({ error: "Ce document ne correspond pas à un fichier téléchargeable." });
+    }
+
+    const absolutePath = path.resolve(document.file_path);
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ error: "Fichier introuvable sur le serveur." });
+    }
+
+    res.setHeader("Content-Type", document.mime_type || "application/octet-stream");
+    const disposition = inline ? "inline" : "attachment";
+    const safeFilename = path.basename(document.name || "document");
+    const encodedFilename = encodeURIComponent(safeFilename);
+    res.setHeader(
+      "Content-Disposition",
+      `${disposition}; filename="${safeFilename.replace(/"/g, "_")}"; filename*=UTF-8''${encodedFilename}`
+    );
+
+    return res.sendFile(absolutePath);
+  } catch (err) {
+    console.error("Erreur téléchargement fichier:", err);
+    return res.status(500).json({ error: "Erreur serveur interne" });
   }
 });
 
