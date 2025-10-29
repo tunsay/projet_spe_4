@@ -24,8 +24,6 @@ const documentRoutes = require("./routes/documents.js");
 
 const app = express();
 
-console.log(`DB_USER: ${process.env.DB_USER}`); // Ligne de débogage pour confirmer le chargement du .env
-
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -93,9 +91,9 @@ app.use("/api/auth", authRoutes); // Authentification (login, register)
 
 // Correction: Le middleware 'auth' est manquant sur /api/profile dans l'ancienne version.
 // Il est essentiel pour toutes les routes de profil qui nécessitent l'utilisateur connecté.
-app.use("/api/profile", profileRoutes); // Profil utilisateur (nécessite d'être connecté)
+app.use("/api/profile", auth, profileRoutes); // Profil utilisateur (nécessite d'être connecté)
 
-app.use("/api/admin", adminAuth, adminRoutes); // Routes d'administration (nécessite d'être admin)
+app.use("/api/admin", adminRoutes); // Routes d'administration (nécessite d'être admin)
 app.use("/api/documents", auth, documentRoutes); // Routes de documents (nécessite d'être connecté)
 
 // --- Gestion des Erreurs et 404 ---

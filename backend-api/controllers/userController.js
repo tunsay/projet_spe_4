@@ -66,10 +66,6 @@ const setupTwoFactor = async (req, res) => {
         user.two_factor_secret = secret;
         await user.save();
 
-        console.log(
-            `Secret 2FA temporaire pour l'utilisateur ${user.email}: ${secret}`
-        );
-
         res.status(200).json({
             // Le secret est renvoyé car il est nécessaire pour la vérification, mais il est maintenant stocké.
             secret: secret,

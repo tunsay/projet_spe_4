@@ -29,7 +29,7 @@ const { authenticateToken } = require("../middleware/authMiddleware");
  *       '401':
  *         description: Non autorisé
  */
-router.get("/", authenticateToken, userController.getUserProfile);
+router.get("/", userController.getUserProfile);
 
 /**
  * @openapi
@@ -95,7 +95,7 @@ router.put("/", (req, res) =>
  *                   type: string
  *                   description: Data URL PNG
  */
-router.post("/2fa-setup", authenticateToken, userController.setupTwoFactor);
+router.post("/2fa-setup", userController.setupTwoFactor);
 
 /**
  * @openapi
@@ -129,10 +129,6 @@ router.post("/2fa-setup", authenticateToken, userController.setupTwoFactor);
  *       '440':
  *         description: Code TOTP invalide (code personnalisé du contrôleur).
  */
-router.post(
-    "/2fa-activate",
-    authenticateToken,
-    userController.activateTwoFactor
-);
+router.post("/2fa-activate", userController.activateTwoFactor);
 
 module.exports = router;

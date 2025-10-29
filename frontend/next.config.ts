@@ -1,13 +1,13 @@
-import type { NextConfig } from "next";
-import dotenvLoad from "dotenv-load";
-
-dotenvLoad();
-
-const nextConfig: NextConfig = {
-  /* config options here */
-  env: {
-    NEXT_API_URL: process.env.NEXT_API_URL,
-  }
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+    async rewrites() {
+        return [
+            // /api/... côté navigateur -> proxy interne vers service Docker "api"
+            {
+                source: "/api/:path*",
+                destination: "http://api:3000/api/:path*",
+            },
+        ];
+    },
 };
-
-export default nextConfig;
+module.exports = nextConfig;
