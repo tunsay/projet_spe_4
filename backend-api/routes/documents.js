@@ -77,6 +77,101 @@ router.get("/", async (req, res) => {
 /**
  * @openapi
  * /documents/{id}:
+ *   get:
+ *     summary: Récupère les détails d'un document
+ *     tags:
+ *       - Documents
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID du document
+ *     responses:
+ *       '200':
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                   enum:
+ *                     - file
+ *                     - folder
+ *                 owner_id:
+ *                   type: string
+ *                 mime_type:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                 created_at:
+ *                   type: string
+ *                 last_modified_at:
+ *                   type: string
+ *       '404':
+ *         description: Document non trouvé
+ *       '500':
+ *         description: Erreur serveur interne
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    // Récupérer le document
+    const result = await pool.query(
+      `SELECT 
+        id, 
+        name, 
+        type, 
+        owner_id, 
+        mime_type,
+        content,
+        created_at,
+        last_modified_at
+      FROM "documents" 
+      WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const document = result.rows[0];
+
+    res.status(200).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      owner_id: document.owner_id,
+      mime_type: document.mime_type,
+      content: document.content,
+      created_at: document.created_at,
+      last_modified_at: document.last_modified_at,
+    });
+  } catch (err) {
+    console.error("Erreur récupération document:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
+/**
+ * @openapi
+ * /documents/{id}:
  *   delete:
  *     summary: Supprime un document
  *     tags:
@@ -588,5 +683,7 @@ router.post("/:id/invite", async (req, res) => {
     res.status(500).json({ error: "Erreur serveur interne" });
   }
 });
+
+
 
 module.exports = router;
