@@ -503,16 +503,21 @@ router.put("/:id/metadata", async (req, res) => {
  *                   enum:
  *                     - file
  *                     - folder
+ *                     - text
  *                 owner_id:
  *                   type: string
- *                 mime_type:
- *                   type: string
- *                 content:
+ *                 parent_id:
  *                   type: string
  *                 created_at:
  *                   type: string
  *                 last_modified_at:
  *                   type: string
+ *                 mime_type:
+ *                   type: string
+ *                   description: Inclus seulement pour type=file
+ *                 content:
+ *                   type: string
+ *                   description: Inclus seulement pour type=text
  *       '404':
  *         description: Document non trouvé
  *       '500':
@@ -535,6 +540,7 @@ router.get("/:id", async (req, res) => {
         name, 
         type, 
         owner_id, 
+        parent_id,
         mime_type,
         content,
         created_at,
@@ -550,16 +556,30 @@ router.get("/:id", async (req, res) => {
 
     const document = result.rows[0];
 
-    res.status(200).json({
+    // Construire la réponse selon le type
+    const response = {
       id: document.id,
       name: document.name,
       type: document.type,
       owner_id: document.owner_id,
-      mime_type: document.mime_type,
-      content: document.content,
+      parent_id: document.parent_id,
       created_at: document.created_at,
       last_modified_at: document.last_modified_at,
-    });
+    };
+
+    // Ajouter mime_type seulement pour les fichiers
+    if (document.type === "file") {
+      response.mime_type = document.mime_type;
+    }
+
+    // Ajouter content seulement pour les documents textuels
+    if (document.type === "text") {
+      response.content = document.content;
+    }
+
+    // Pour les dossiers, on retourne juste les métadonnées (pas de mime_type ni content)
+
+    res.status(200).json(response);
   } catch (err) {
     console.error("Erreur récupération document:", err);
     res.status(500).json({ error: "Erreur serveur interne" });
