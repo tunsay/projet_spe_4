@@ -4,6 +4,7 @@ const { sequelize } = require("../config/db");
 
 const User = require("./User");
 const Document = require("./Document");
+const DocumentPermission = require("./DocumentPermission");
 // const DocumentPermission = require('./DocumentPermission'); // Commenter ou supprimer les imports manquants
 // const CollaborationSession = require('./CollaborationSession');
 // const SessionParticipant = require('./SessionParticipant');
@@ -14,7 +15,7 @@ const db = {};
 db.sequelize = sequelize;
 db.User = User;
 db.Document = Document;
-// db.DocumentPermission = DocumentPermission; // Commenter ou supprimer l'agrégation
+db.DocumentPermission = DocumentPermission;
 // ...
 
 // Associations
