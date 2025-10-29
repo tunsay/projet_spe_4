@@ -264,6 +264,212 @@ router.post("/", async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /documents/{id}/metadata:
+ *   put:
+ *     summary: Renomme ou déplace un document (tous types)
+ *     tags:
+ *       - Documents
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID du document à modifier
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Nouveau nom du document/dossier
+ *               parent_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID du nouveau dossier parent (optionnel)
+ *     responses:
+ *       '200':
+ *         description: Métadonnées mises à jour
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                 parent_id:
+ *                   type: string
+ *                 owner_id:
+ *                   type: string
+ *                 updated_at:
+ *                   type: string
+ *       '400':
+ *         description: Données invalides
+ *       '401':
+ *         description: User ID requis
+ *       '403':
+ *         description: Accès refusé (pas propriétaire)
+ *       '404':
+ *         description: Document ou parent non trouvé
+ */
+router.put("/:id/metadata", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const owner_id = req.headers["user-id"];
+    const { name, parent_id } = req.body;
+
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    // Au moins un paramètre doit être fourni
+    if (!name && parent_id === undefined) {
+      return res.status(400).json({ error: "Nom ou parent_id doit être fourni" });
+    }
+
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(owner_id)) {
+      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier que le document existe
+    const docCheck = await pool.query(
+      `SELECT id, owner_id, type FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    // Vérifier les permissions (propriétaire ou admin)
+    const permCheck = await pool.query(
+      `SELECT d.owner_id, u.role 
+       FROM "documents" d
+       JOIN "users" u ON u.id = $1
+       WHERE d.id = $2`,
+      [owner_id, id]
+    );
+
+    if (permCheck.rows.length === 0) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    const permission = permCheck.rows[0];
+    const isOwner = permission.owner_id === owner_id;
+    const isAdmin = permission.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Seul le propriétaire peut modifier ce document" });
+    }
+
+    // Valider le nouveau parent_id si fourni
+    let shouldUpdateParent = false;
+    let validatedParentId = null;
+
+    if (parent_id !== undefined) {
+      shouldUpdateParent = true;
+      
+      // parent_id peut être null (racine) ou un UUID valide
+      if (parent_id !== null) {
+        if (!uuidRegex.test(parent_id)) {
+          return res.status(400).json({ error: "Parent ID invalide (doit être un UUID ou null)" });
+        }
+
+        // Vérifier que le parent existe et est un dossier
+        const parentCheck = await pool.query(
+          `SELECT id, type FROM "documents" WHERE id = $1`,
+          [parent_id]
+        );
+
+        if (parentCheck.rows.length === 0) {
+          return res.status(404).json({ error: "Dossier parent non trouvé" });
+        }
+
+        if (parentCheck.rows[0].type !== "folder") {
+          return res.status(400).json({ error: "Le parent doit être un dossier" });
+        }
+
+        // Vérifier que le parent n'est pas un enfant du document (éviter la boucle infinie)
+        const loopCheck = await pool.query(
+          `WITH RECURSIVE hierarchy AS (
+            SELECT id, parent_id FROM "documents" WHERE id = $1
+            UNION
+            SELECT d.id, d.parent_id FROM "documents" d
+            JOIN hierarchy h ON d.parent_id = h.id
+          )
+          SELECT COUNT(*) as count FROM hierarchy WHERE id = $2`,
+          [id, parent_id]
+        );
+
+        if (loopCheck.rows[0].count > 0) {
+          return res.status(400).json({ error: "Impossible de déplacer un dossier dans ses enfants" });
+        }
+
+        validatedParentId = parent_id;
+      }
+    }
+
+    // Mettre à jour les métadonnées
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (name) {
+      updates.push(`name = $${paramCount++}`);
+      values.push(name);
+    }
+
+    if (shouldUpdateParent) {
+      updates.push(`parent_id = $${paramCount++}`);
+      values.push(validatedParentId);
+    }
+
+    updates.push(`last_modified_at = NOW()`);
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE "documents" 
+       SET ${updates.join(", ")}
+       WHERE id = $${paramCount}
+       RETURNING id, name, type, parent_id, owner_id, last_modified_at`,
+      values
+    );
+
+    const document = result.rows[0];
+
+    res.status(200).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      parent_id: document.parent_id,
+      owner_id: document.owner_id,
+      updated_at: document.last_modified_at,
+    });
+  } catch (err) {
+    console.error("Erreur mise à jour métadonnées:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
 
 /**
  * @openapi
