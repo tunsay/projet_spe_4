@@ -242,6 +242,33 @@ router.post("/file", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
     }
 
+    // Vérifier que l'utilisateur existe en base de données
+    const userCheck = await pool.query(
+      `SELECT id FROM "users" WHERE id = $1`,
+      [owner_id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    // Valider parent_id si fourni
+    if (parent_id && parent_id.trim() !== "") {
+      if (!uuidRegex.test(parent_id)) {
+        return res.status(400).json({ error: "Parent ID invalide (doit être un UUID)" });
+      }
+      
+      // Vérifier que le parent existe
+      const parentCheck = await pool.query(
+        `SELECT id FROM "documents" WHERE id = $1`,
+        [parent_id]
+      );
+      
+      if (parentCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Dossier parent non trouvé" });
+      }
+    }
+
     const fileName = req.file.originalname;
     const mimeType = req.file.mimetype;
     const filePath = req.file.path;
