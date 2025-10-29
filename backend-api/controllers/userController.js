@@ -135,8 +135,62 @@ const activateTwoFactor = async (req, res) => {
     }
 };
 
+/**
+ * Met à jour le profil de l'utilisateur (nom, mot de passe)
+ */
+const updateUserProfile = async (req, res) => {
+    const userId = req.userId;
+    const { name, password } = req.body;
+
+    try {
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé." });
+        }
+
+        // Valider les champs
+        if (!name && !password) {
+            return res.status(400).json({ message: "Nom ou mot de passe requis." });
+        }
+
+        if (name && name.trim().length === 0) {
+            return res.status(400).json({ message: "Le nom ne peut pas être vide." });
+        }
+
+        if (password && password.length < 8) {
+            return res.status(400).json({ message: "Le mot de passe doit contenir au minimum 8 caractères." });
+        }
+
+        // Mettre à jour le nom
+        if (name) {
+            user.display_name = name;
+        }
+
+        // Mettre à jour le mot de passe
+        if (password) {
+            const bcrypt = require("bcrypt");
+            const hashedPassword = await bcrypt.hash(password, 10);
+            user.password_hash = hashedPassword;
+        }
+
+        await user.save();
+
+        res.status(200).json({
+            id: user.id,
+            name: user.display_name,
+            email: user.email,
+            message: "Profil mis à jour avec succès."
+        });
+    } catch (error) {
+        console.error("Erreur lors de la mise à jour du profil:", error);
+        res.status(500).json({ message: "Erreur serveur interne." });
+    }
+};
+
 module.exports = {
     getUserProfile,
     setupTwoFactor,
-    activateTwoFactor, // <-- Nouvelle fonction exportée
+    activateTwoFactor,
+    updateUserProfile
 };

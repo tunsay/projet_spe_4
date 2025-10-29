@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const userController = require("../controllers/userController");
-const { authenticateToken } = require("../middleware/authMiddleware");
+const auth = require("../middleware/auth");
 
 /**
  * @openapi
@@ -38,6 +38,8 @@ router.get("/", userController.getUserProfile);
  *     summary: Met à jour le profil (nom, mot de passe)
  *     tags:
  *       - Profile
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -47,9 +49,11 @@ router.get("/", userController.getUserProfile);
  *             properties:
  *               name:
  *                 type: string
+ *                 description: Nouveau nom d'affichage
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 description: Nouveau mot de passe
  *     responses:
  *       '200':
  *         description: Mis à jour
@@ -65,14 +69,14 @@ router.get("/", userController.getUserProfile);
  *                 email:
  *                   type: string
  *                   format: email
+ *                 message:
+ *                   type: string
  *       '400':
  *         description: Requête invalide
  *       '401':
  *         description: Non autorisé
  */
-router.put("/", (req, res) =>
-    res.json({ id: "u1", name: "Alice", email: "a@b.c" })
-);
+router.put("/", auth, userController.updateUserProfile);
 
 /**
  * @openapi
