@@ -4,6 +4,8 @@ const { pool } = require("../config/db");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const db = require("../models");
+const DocumentPermission = db.DocumentPermission;
 
 // Configuration multer pour l'upload
 const upload = multer({ 
@@ -175,8 +177,9 @@ router.get("/", async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const owner_id = req.headers["user-id"];
-    const { name, type, content, parent_id } = req.body;
+    const owner_id = req.userId;
+
+    const { name, type, content, parent_id = null } = req.body;
 
     // Vérifier que owner_id est fourni
     if (!owner_id) {
@@ -241,13 +244,19 @@ router.post("/", async (req, res) => {
     // Insérer le document en base de données
     const result = await pool.query(
       `INSERT INTO "documents" 
-       (name, type, content, owner_id, parent_id, last_modified_by_id, last_modified_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING id, name, type, owner_id, parent_id, content, created_at`,
+      (name, type, content, owner_id, parent_id, last_modified_by_id, last_modified_at) 
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      RETURNING id, name, type, owner_id, parent_id, content, created_at`,
       [name, type, content || null, owner_id, validatedParentId, owner_id]
     );
 
     const document = result.rows[0];
+
+    await DocumentPermission.create({
+      document_id: document.id,
+      user_id: req.userId,
+      permission: "owner"
+    })
 
     res.status(201).json({
       id: document.id,
@@ -857,6 +866,41 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+
+router.get("/:id/permissionByUser", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    if( !userId ){
+      return res.status(400).json({ error: "UserId is needed" });
+    }
+
+    // Récupérer le document
+    const permission = await DocumentPermission.findOne({
+      where: { user_id: userId, document_id : id },
+    });
+
+    if ( !permission ) {
+      return res.status(404).json({ error: "Aucun droit" });
+    }
+
+    res.status(200).json({
+      user_id: userId,
+      document_id: id,
+      permission: permission.permission,
+    });
+  } catch (err) {
+    console.error("Erreur modification document:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi

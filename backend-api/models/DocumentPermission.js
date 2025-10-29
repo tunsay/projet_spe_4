@@ -15,7 +15,7 @@ const DocumentPermission = sequelize.define(
             primaryKey: true,
         },
         // Ajoutez ici les autres colonnes au fur et à mesure
-        role: {
+        permission: {
             type: DataTypes.ENUM("read", "edit", "owner"),
             allowNull: false,
             defaultValue: "read",
