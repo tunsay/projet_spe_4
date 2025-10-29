@@ -36,24 +36,24 @@ const bcrypt = require("bcrypt");
  *                     type: boolean
  */
 router.get("/users", async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT id, email, role, display_name, is_blocked FROM "users" ORDER BY created_at DESC`
-    );
+    try {
+        const result = await pool.query(
+            `SELECT id, email, role, display_name, is_blocked FROM "users" ORDER BY created_at DESC`
+        );
 
-    const users = result.rows.map((user) => ({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      display_name: user.display_name,
-      is_blocked: user.is_blocked,
-    }));
+        const users = result.rows.map((user) => ({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            display_name: user.display_name,
+            is_blocked: user.is_blocked,
+        }));
 
-    res.status(200).json(users);
-  } catch (err) {
-    console.error("Erreur récupération users:", err);
-    res.status(500).json({ error: "Erreur serveur interne" });
-  }
+        res.status(200).json(users);
+    } catch (err) {
+        console.error("Erreur récupération users:", err);
+        res.status(500).json({ error: "Erreur serveur interne" });
+    }
 });
 
 /**
@@ -102,34 +102,36 @@ router.get("/users", async (req, res) => {
  *                   type: string
  */
 router.post("/users", async (req, res) => {
-  try {
-    const { email, password, role = "user" } = req.body;
+    try {
+        const { email, password, display_name, role = "user" } = req.body;
 
-    // Validation basique
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email et password requis" });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Password minimum 8 caractères" });
-    }
+        // Validation basique
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email et password requis" });
+        }
+        if (password.length < 8) {
+            return res
+                .status(400)
+                .json({ error: "Password minimum 8 caractères" });
+        }
 
-    // Hasher le mot de passe avec bcrypt (salt rounds = 10)
-    const password_hash = await bcrypt.hash(password, 10);
+        // Hasher le mot de passe avec bcrypt (salt rounds = 10)
+        const password_hash = await bcrypt.hash(password, 10);
 
-    // Insérer l'utilisateur avec le hash
-    const result = await pool.query(
-      `INSERT INTO "users" (email, password_hash, role)
-       VALUES ($1, $2, $3)
+        // Insérer l'utilisateur avec le hash
+        const result = await pool.query(
+            `INSERT INTO "users" (email, password_hash, display_name, role)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, email, role`,
-      [email, password_hash, role]
-    );
+            [email, password_hash, display_name, role]
+        );
 
-    const user = result.rows[0];
-    res.status(201).json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(400).json({ error: err.message });
-  }
+        const user = result.rows[0];
+        res.status(201).json(user);
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
+    }
 });
 
 /**
@@ -165,36 +167,36 @@ router.post("/users", async (req, res) => {
  *         description: Utilisateur non trouvé
  */
 router.put("/users/:id/block", async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    // Vérifier que l'utilisateur existe
-    const userCheck = await pool.query(
-      `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
-      [id]
-    );
+        // Vérifier que l'utilisateur existe
+        const userCheck = await pool.query(
+            `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
+            [id]
+        );
 
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Utilisateur non trouvé" });
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: "Utilisateur non trouvé" });
+        }
+
+        // Mettre à jour is_blocked à true
+        const result = await pool.query(
+            `UPDATE "users" SET is_blocked = true WHERE id = $1 RETURNING id, email, is_blocked`,
+            [id]
+        );
+
+        const user = result.rows[0];
+        res.status(200).json({
+            message: "Utilisateur bloqué avec succès",
+            id: user.id,
+            email: user.email,
+            is_blocked: user.is_blocked,
+        });
+    } catch (err) {
+        console.error("Erreur blocage user:", err);
+        res.status(500).json({ error: "Erreur serveur interne" });
     }
-
-    // Mettre à jour is_blocked à true
-    const result = await pool.query(
-      `UPDATE "users" SET is_blocked = true WHERE id = $1 RETURNING id, email, is_blocked`,
-      [id]
-    );
-
-    const user = result.rows[0];
-    res.status(200).json({
-      message: "Utilisateur bloqué avec succès",
-      id: user.id,
-      email: user.email,
-      is_blocked: user.is_blocked,
-    });
-  } catch (err) {
-    console.error("Erreur blocage user:", err);
-    res.status(500).json({ error: "Erreur serveur interne" });
-  }
 });
 
 /**
@@ -230,38 +232,37 @@ router.put("/users/:id/block", async (req, res) => {
  *         description: Utilisateur non trouvé
  */
 router.put("/users/:id/unblock", async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    // Vérifier que l'utilisateur existe
-    const userCheck = await pool.query(
-      `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
-      [id]
-    );
+        // Vérifier que l'utilisateur existe
+        const userCheck = await pool.query(
+            `SELECT id, email, is_blocked FROM "users" WHERE id = $1`,
+            [id]
+        );
 
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Utilisateur non trouvé" });
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: "Utilisateur non trouvé" });
+        }
+
+        // Mettre à jour is_blocked à false
+        const result = await pool.query(
+            `UPDATE "users" SET is_blocked = false WHERE id = $1 RETURNING id, email, is_blocked`,
+            [id]
+        );
+
+        const user = result.rows[0];
+        res.status(200).json({
+            message: "Utilisateur débloqué avec succès",
+            id: user.id,
+            email: user.email,
+            is_blocked: user.is_blocked,
+        });
+    } catch (err) {
+        console.error("Erreur déblocage user:", err);
+        res.status(500).json({ error: "Erreur serveur interne" });
     }
-
-    // Mettre à jour is_blocked à false
-    const result = await pool.query(
-      `UPDATE "users" SET is_blocked = false WHERE id = $1 RETURNING id, email, is_blocked`,
-      [id]
-    );
-
-    const user = result.rows[0];
-    res.status(200).json({
-      message: "Utilisateur débloqué avec succès",
-      id: user.id,
-      email: user.email,
-      is_blocked: user.is_blocked,
-    });
-  } catch (err) {
-    console.error("Erreur déblocage user:", err);
-    res.status(500).json({ error: "Erreur serveur interne" });
-  }
 });
-
 
 /**
  * @openapi
@@ -304,44 +305,46 @@ router.put("/users/:id/unblock", async (req, res) => {
  *         description: Utilisateur non trouvé
  */
 router.put("/changepassword", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-    // Validation basique
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email et password requis" });
+        // Validation basique
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email et password requis" });
+        }
+        if (password.length < 8) {
+            return res
+                .status(400)
+                .json({ error: "Password minimum 8 caractères" });
+        }
+
+        // Vérifier que l'utilisateur existe
+        const userCheck = await pool.query(
+            `SELECT id FROM "users" WHERE email = $1`,
+            [email]
+        );
+
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: "Utilisateur non trouvé" });
+        }
+
+        // Hasher le nouveau mot de passe
+        const password_hash = await bcrypt.hash(password, 10);
+
+        // Mettre à jour le mot de passe
+        await pool.query(
+            `UPDATE "users" SET password_hash = $1 WHERE email = $2`,
+            [password_hash, email]
+        );
+
+        res.status(200).json({
+            message: "Mot de passe changé avec succès",
+            email: email,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Password minimum 8 caractères" });
-    }
-
-    // Vérifier que l'utilisateur existe
-    const userCheck = await pool.query(
-      `SELECT id FROM "users" WHERE email = $1`,
-      [email]
-    );
-
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Utilisateur non trouvé" });
-    }
-
-    // Hasher le nouveau mot de passe
-    const password_hash = await bcrypt.hash(password, 10);
-
-    // Mettre à jour le mot de passe
-    await pool.query(
-      `UPDATE "users" SET password_hash = $1 WHERE email = $2`,
-      [password_hash, email]
-    );
-
-    res.status(200).json({ 
-      message: "Mot de passe changé avec succès",
-      email: email
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(400).json({ error: err.message });
-  }
 });
 
 module.exports = router;

@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 // --- Types et Endpoints ---
+// ⚠️ Mise à jour de l'interface pour inclure le rôle
 interface Profile {
     name: string;
     email: string;
+    role: "admin" | "user"; // Ajout du rôle
 }
 
 const ENDPOINTS = {
@@ -17,6 +19,7 @@ const ENDPOINTS = {
 // --- Composant Principal Header ---
 export default function Header() {
     const router = useRouter();
+    // Utilisation du type Profile mis à jour
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +27,7 @@ export default function Header() {
     const handleLogout = useCallback(async () => {
         setError(null);
         try {
+            // Note: Le point de terminaison de déconnexion est toujours '/auth/logout'
             await fetch(ENDPOINTS.LOGOUT, { method: "POST" });
 
             setProfile(null);
@@ -40,6 +44,7 @@ export default function Header() {
             setError(null);
 
             try {
+                // Note: Le point de terminaison de profil est /api/profile
                 const response = await fetch(ENDPOINTS.PROFILE_ME);
 
                 if (response.status === 401 || response.status === 403) {
@@ -57,6 +62,7 @@ export default function Header() {
                     return;
                 }
 
+                // Assurez-vous que l'API renvoie bien le champ 'role'
                 const data: Profile = await response.json();
                 setProfile(data);
             } catch (err) {
@@ -75,6 +81,7 @@ export default function Header() {
     }, []);
 
     const displayName = profile?.name || profile?.email || "Utilisateur";
+    const isAdmin = profile?.role === "admin"; // Nouvelle vérification du rôle
 
     // --- Rendu ---
     return (
@@ -85,17 +92,21 @@ export default function Header() {
                         Collaboratif
                     </Link>
                     <Link
-                        href="/"
-                        className="text-sm text-slate-600 hover:text-slate-900"
-                    >
-                        Dashboard
-                    </Link>
-                    <Link
                         href="/documents"
                         className="text-sm text-slate-600 hover:text-slate-900"
                     >
                         Documents
                     </Link>
+
+                    {/* 🔑 Lien Admin conditionnel */}
+                    {isAdmin && (
+                        <Link
+                            href="/admin"
+                            className="text-sm text-indigo-600 font-medium hover:text-indigo-900 transition-colors duration-150"
+                        >
+                            Administration
+                        </Link>
+                    )}
                 </nav>
 
                 {loading ? (

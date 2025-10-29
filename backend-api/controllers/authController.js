@@ -51,7 +51,11 @@ exports.verifyTwoFactor = async (req, res, next) => {
 
         if (!ok) return res.status(440).json({ message: "Code TOTP invalide" });
 
-        const newJwt = signJwt({ id: user.id, email: user.email, mfa: true });
+        const newJwt = signJwt({
+            userId: user.id,
+            email: user.email,
+            mfa: true,
+        });
         res.cookie(COOKIE_NAME, newJwt, {
             httpOnly: true,
             secure: COOKIE_SECURE,
@@ -75,6 +79,8 @@ exports.postLogin = async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({ error: "Email et password requis" });
         }
+
+        console.log("Login attempt for:", email);
 
         // Rechercher l'utilisateur en base de données
         const user = await User.findOne({ where: { email } });
@@ -108,8 +114,9 @@ exports.postLogin = async (req, res) => {
         // Définir le cookie
         res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: COOKIE_SECURE,
+            sameSite: COOKIE_SAMESITE,
+            domain: COOKIE_DOMAIN,
         });
 
         res.status(200).json({

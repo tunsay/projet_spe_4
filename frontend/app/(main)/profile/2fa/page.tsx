@@ -28,25 +28,33 @@ type Step = "loading" | "enroll" | "verify";
 const extractErrorMessage = async (
     response: Response | null,
     error: unknown
-): Promise<string> => {
+): Promise<string | null> => {
     try {
         if (response && !response.ok) {
-            const body = await response.json();
-            const msg = body?.message || body?.error;
+            const body = await response.json().catch(() => ({}));
+            const msg = (body as any)?.message || (body as any)?.error;
 
             if (response.status === 401)
                 return "Non autorisé. Veuillez vous reconnecter.";
+            if (response.status === 400) {
+                if (
+                    typeof msg === "string" &&
+                    (msg.includes("non activé") ||
+                        msg.includes("already active"))
+                ) {
+                    return msg;
+                }
+                return null;
+            }
             if (response.status === 440) return "Code TOTP invalide.";
 
             return msg ?? `Erreur HTTP: ${response.status}`;
         }
     } catch (e) {
-        console.log(e);
+        console.error("Failed to extract error message body:", e);
     }
 
-    if (error instanceof Error) {
-        return error.message;
-    }
+    if (error instanceof Error) return error.message;
     return "Une erreur inconnue est survenue.";
 };
 
@@ -67,19 +75,12 @@ export default function TwoFAPage() {
             body?: object
         ): Promise<Json> => {
             const response = await fetch(url, {
-                method: method,
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                method,
+                headers: { "Content-Type": "application/json" },
                 body: body ? JSON.stringify(body) : undefined,
             });
 
             if (!response.ok) {
-                console.error(
-                    `Erreur HTTP ${response.status} sur ${url}:`,
-                    response
-                );
-
                 const error: FetchError = new Error(
                     `HTTP Error ${response.status}`
                 );
@@ -89,8 +90,8 @@ export default function TwoFAPage() {
 
             try {
                 return await response.json();
-            } catch (e) {
-                console.log(e);
+            } catch {
+                // 204 / no content
             }
         },
         []
@@ -101,37 +102,27 @@ export default function TwoFAPage() {
             setBusy(true);
             setMsg(null);
 
-            let response: Response | null = null;
             try {
                 const data = await fetchData(ENDPOINTS.SETUP, "POST");
-
                 setQr(pickStr(data, "qrCodeImage") ?? pickStr(data, "qr"));
                 setSecret(pickStr(data, "secret"));
                 setStep("enroll");
             } catch (err) {
                 const fetchError = err as FetchError;
-                console.error("Erreur de chargement 2FA:", fetchError);
-
-                response = fetchError.response ?? null;
+                const response = fetchError.response ?? null;
 
                 if (response?.status === 401) {
                     router.replace("/login");
                     return;
                 }
 
+                const errorMessage = await extractErrorMessage(response, err);
                 if (response?.status === 400) {
-                    const errorMsg = await extractErrorMessage(response, err);
-                    if (
-                        errorMsg.includes("non activé") ||
-                        errorMsg.includes("already active")
-                    ) {
-                        setStep("verify");
-                        return;
-                    }
+                    setStep("verify");
+                    return;
                 }
 
-                const errorMessage = await extractErrorMessage(response, err);
-                setMsg({ t: "err", m: errorMessage });
+                if (errorMessage) setMsg({ t: "err", m: errorMessage });
                 setStep("verify");
             } finally {
                 setBusy(false);
@@ -145,10 +136,9 @@ export default function TwoFAPage() {
         if (token.length < 6) return;
         setBusy(true);
         setMsg(null);
-        let response: Response | null = null;
+
         try {
             await fetchData(ENDPOINTS.ACTIVATE, "POST", { token });
-
             setMsg({
                 t: "ok",
                 m: "2FA activé. Veuillez vérifier un code pour continuer.",
@@ -156,11 +146,12 @@ export default function TwoFAPage() {
             setStep("verify");
         } catch (err) {
             const fetchError = err as FetchError;
-            console.error("Erreur d'activation 2FA:", fetchError);
-
-            response = fetchError.response ?? null;
+            const response = fetchError.response ?? null;
             const errorMessage = await extractErrorMessage(response, err);
-            setMsg({ t: "err", m: errorMessage });
+
+            if (!(response?.status === 400 && !errorMessage) && errorMessage) {
+                setMsg({ t: "err", m: errorMessage });
+            }
         } finally {
             setBusy(false);
         }
@@ -170,31 +161,31 @@ export default function TwoFAPage() {
         if (token.length < 6) return;
         setBusy(true);
         setMsg(null);
-        let response: Response | null = null;
+
         try {
             await fetchData(ENDPOINTS.VERIFY, "POST", { token });
-
             router.replace("/");
         } catch (err) {
             const fetchError = err as FetchError;
-            console.error("Erreur de vérification 2FA:", fetchError);
-
-            response = fetchError.response ?? null;
+            const response = fetchError.response ?? null;
             const errorMessage = await extractErrorMessage(response, err);
-            setMsg({ t: "err", m: errorMessage });
+
+            if (!(response?.status === 400 && !errorMessage) && errorMessage) {
+                setMsg({ t: "err", m: errorMessage });
+            }
         } finally {
             setBusy(false);
         }
     }, [token, router, fetchData]);
 
-    // --- Rendu ---
+    // --- Rendu (palette alignée au composant profil) ---
     return (
-        <main className="min-h-screen bg-slate-50 py-10">
+        <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10">
             <div className="mx-auto w-full max-w-xl px-4">
-                <h1 className="text-2xl font-semibold text-slate-900">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     Authentification 2FA
                 </h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     {step === "loading"
                         ? "Chargement…"
                         : step === "enroll"
@@ -206,8 +197,8 @@ export default function TwoFAPage() {
                     <div
                         className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
                             msg.t === "ok"
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                                : "border-rose-300 bg-rose-50 text-rose-800"
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                : "border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300"
                         }`}
                     >
                         {msg.m}
@@ -215,14 +206,14 @@ export default function TwoFAPage() {
                 )}
 
                 {step === "enroll" && (
-                    <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
-                        <p className="text-sm text-slate-600">
+                    <section className="mt-6 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-2xl">
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
                             Scanne ce QR avec ton application
                             d’authentification, puis saisis un code pour activer
                             le 2FA.
                         </p>
                         <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row">
-                            <div className="grid h-[220px] w-[220px] place-items-center overflow-hidden rounded-xl border border-dashed">
+                            <div className="grid h-[220px] w-[220px] place-items-center overflow-hidden rounded-md border border-dashed border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-900/20">
                                 {qr ? (
                                     <Image
                                         src={qr}
@@ -232,21 +223,21 @@ export default function TwoFAPage() {
                                         unoptimized
                                     />
                                 ) : (
-                                    <span className="text-slate-400 text-sm">
+                                    <span className="text-gray-400 text-sm">
                                         (QR indisponible)
                                     </span>
                                 )}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <div className="text-xs uppercase tracking-wide text-slate-500">
+                                <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                     Secret
                                 </div>
-                                <div className="mt-1 select-all rounded-md border bg-slate-50 px-2 py-1 font-mono text-sm text-slate-700">
+                                <div className="mt-1 select-all rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 px-2 py-1 font-mono text-sm text-gray-800 dark:text-gray-100">
                                     {secret ?? "(absent)"}
                                 </div>
                                 <div className="mt-4 flex items-center gap-2">
                                     <input
-                                        className="w-44 rounded-md border px-3 py-2 text-sm outline-none ring-2 ring-transparent focus:border-indigo-400 focus:ring-indigo-100"
+                                        className="w-44 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none ring-2 ring-transparent focus:border-indigo-500 focus:ring-indigo-100 dark:focus:ring-indigo-900/40"
                                         value={token}
                                         onChange={(e) =>
                                             setToken(e.target.value)
@@ -258,7 +249,7 @@ export default function TwoFAPage() {
                                     <button
                                         onClick={handleActivate}
                                         disabled={busy || token.length < 6}
-                                        className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                                        className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
                                     >
                                         {busy ? "Activation…" : "Activer"}
                                     </button>
@@ -269,13 +260,13 @@ export default function TwoFAPage() {
                 )}
 
                 {step === "verify" && (
-                    <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
-                        <p className="text-sm text-slate-600">
+                    <section className="mt-6 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-2xl">
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
                             2FA actif. Entre un code pour continuer.
                         </p>
                         <div className="mt-3 flex items-center gap-2">
                             <input
-                                className="w-44 rounded-md border px-3 py-2 text-sm outline-none ring-2 ring-transparent focus:border-indigo-400 focus:ring-indigo-100"
+                                className="w-44 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none ring-2 ring-transparent focus:border-indigo-500 focus:ring-indigo-100 dark:focus:ring-indigo-900/40"
                                 value={token}
                                 onChange={(e) => setToken(e.target.value)}
                                 placeholder="Code (6 chiffres)"
@@ -285,7 +276,7 @@ export default function TwoFAPage() {
                             <button
                                 onClick={handleVerify}
                                 disabled={busy || token.length < 6}
-                                className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
                             >
                                 {busy ? "Vérification…" : "Vérifier"}
                             </button>
@@ -294,10 +285,10 @@ export default function TwoFAPage() {
                 )}
 
                 {step === "loading" && (
-                    <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
+                    <section className="mt-6 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-2xl">
                         <div className="animate-pulse">
-                            <div className="h-5 w-40 rounded bg-slate-200" />
-                            <div className="mt-4 h-48 w-full rounded-xl bg-slate-100" />
+                            <div className="h-5 w-40 rounded bg-gray-200 dark:bg-gray-700" />
+                            <div className="mt-4 h-48 w-full rounded-xl bg-gray-100 dark:bg-gray-700/60" />
                         </div>
                     </section>
                 )}
