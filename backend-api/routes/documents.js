@@ -3,6 +3,7 @@ const router = express.Router();
 const { pool } = require("../config/db");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 
 // Configuration multer pour l'upload
 const upload = multer({ 
@@ -86,11 +87,86 @@ router.get("/", async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
+ *         description: UUID du document à supprimer
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
  *     responses:
  *       '204':
- *         description: Supprimé
+ *         description: Supprimé avec succès
+ *       '403':
+ *         description: Accès refusé (pas propriétaire)
+ *       '404':
+ *         description: Document non trouvé
+ *       '500':
+ *         description: Erreur serveur interne
  */
-router.delete("/:id", (req, res) => res.status(204).send());
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const owner_id = req.headers["user-id"];
+
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    // Vérifier que le document existe et appartient à l'utilisateur
+    const docCheck = await pool.query(
+      `SELECT id, file_path, type FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const doc = docCheck.rows[0];
+
+    // Vérifier les permissions (propriétaire ou admin)
+    const permCheck = await pool.query(
+      `SELECT d.owner_id, u.role 
+       FROM "documents" d
+       JOIN "users" u ON u.id = $1
+       WHERE d.id = $2`,
+      [owner_id, id]
+    );
+
+    if (permCheck.rows.length === 0) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    const permission = permCheck.rows[0];
+    const isOwner = permission.owner_id === owner_id;
+    const isAdmin = permission.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Seul le propriétaire peut supprimer ce document" });
+    }
+
+    // Supprimer le fichier du système de fichiers si c'est un fichier
+    if (doc.type === "file" && doc.file_path) {
+      fs.unlink(doc.file_path, (err) => {
+        if (err) console.error("Erreur suppression fichier:", err);
+      });
+    }
+
+    // Supprimer le document et ses enfants (cascade)
+    await pool.query(
+      `DELETE FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    res.status(204).send();
+  } catch (err) {
+    console.error("Erreur suppression document:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
