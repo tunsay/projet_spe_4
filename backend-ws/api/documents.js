@@ -1,6 +1,6 @@
 
 export default {
-    getId: async (user, documentId) => {
+    getById: async (user, documentId) => {
         const response = await fetch(process.env.API_URL + `documents/` + documentId, {
             credentials: 'include',
             headers: {
@@ -12,7 +12,7 @@ export default {
         }
         return response.json();
     },
-    getIdPermission: async (user, documentId) => {
+    getByIdPermission: async (user, documentId) => {
         const response = await fetch(process.env.API_URL + `documents/${documentId}/permissionByUser` + `?userId=${user.id}`, {
             credentials: 'include',
             headers: {
