@@ -433,6 +433,15 @@ router.put("/file/:id", upload.single("file"), async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
+ *         description: UUID du document
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté (propriétaire)
  *     requestBody:
  *       required: true
  *       content:
@@ -441,20 +450,116 @@ router.put("/file/:id", upload.single("file"), async (req, res) => {
  *             type: object
  *             required:
  *               - email
- *               - role
+ *               - permission
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
- *               role:
+ *               permission:
  *                 type: string
  *                 enum:
- *                   - editor
- *                   - viewer
+ *                   - read
+ *                   - edit
+ *                   - owner
  *     responses:
- *       '204':
- *         description: Invitation envoyée
+ *       '201':
+ *         description: Permission accordée
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user_email:
+ *                   type: string
+ *                 permission:
+ *                   type: string
+ *       '400':
+ *         description: Email ou permission manquant
+ *       '401':
+ *         description: User ID requis
+ *       '403':
+ *         description: Seul le propriétaire peut inviter
+ *       '404':
+ *         description: Document ou utilisateur non trouvé
  */
-router.post("/:id/invite", (req, res) => res.status(204).send());
+router.post("/:id/invite", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const owner_id = req.headers["user-id"];
+    const { email, permission } = req.body;
+
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    if (!email || !permission) {
+      return res.status(400).json({ error: "Email et permission requis" });
+    }
+
+    if (!["read", "edit", "owner"].includes(permission)) {
+      return res.status(400).json({ error: "Permission invalide (read, edit, owner)" });
+    }
+
+    // Vérifier que le document existe et appartient à l'utilisateur
+    const docCheck = await pool.query(
+      `SELECT owner_id FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const doc = docCheck.rows[0];
+
+    // Vérifier que c'est le propriétaire qui invite
+    if (doc.owner_id !== owner_id) {
+      return res.status(403).json({ error: "Seul le propriétaire peut inviter" });
+    }
+
+    // Trouver l'utilisateur par email
+    const userCheck = await pool.query(
+      `SELECT id FROM "users" WHERE email = $1`,
+      [email]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    const user = userCheck.rows[0];
+
+    // Vérifier si une permission existe déjà
+    const permCheck = await pool.query(
+      `SELECT permission FROM "document_permissions" WHERE user_id = $1 AND document_id = $2`,
+      [user.id, id]
+    );
+
+    if (permCheck.rows.length > 0) {
+      // Mettre à jour la permission existante
+      await pool.query(
+        `UPDATE "document_permissions" SET permission = $1 WHERE user_id = $2 AND document_id = $3`,
+        [permission, user.id, id]
+      );
+    } else {
+      // Créer une nouvelle permission
+      await pool.query(
+        `INSERT INTO "document_permissions" (user_id, document_id, permission) VALUES ($1, $2, $3)`,
+        [user.id, id, permission]
+      );
+    }
+
+    res.status(201).json({
+      message: "Permission accordée avec succès",
+      user_email: email,
+      permission: permission,
+    });
+  } catch (err) {
+    console.error("Erreur invitation:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 module.exports = router;
