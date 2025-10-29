@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import { canAccessDocument, loadDocumentSnapshot } from "./services/documents.js";
 dotenv.config();
 
 const io = new Server({
@@ -16,12 +17,11 @@ const io = new Server({
 // Middleware d'auth au handshake
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-  console.log("token:", token);
   if (!token) return next(new Error("unauthorized"));
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    socket.user = { id: payload.sub, email: payload.email }; // attache user au socket
+    socket.user = { id: payload.userId, email: payload.userEmail, token };
     return next();
   } catch (err) {
     return next(new Error("unauthorized"));
@@ -32,49 +32,73 @@ io.on("connection", (socket) => {
   console.log("user connected", socket.id, "user:", socket.user?.id);
 
   // Demande de rejoindre un document
-  socket.on("join-document", async ({ docId }, ack) => {
-    if (!docId) return ack?.({ ok: false, reason: "missing_docId" });
+  socket.on("join-document", async ({ docId }) => {
+    try {
+      if (!docId) return socket.emit({ ok: false, reason: "missing_docId" });
+  
+      // Vérifier droit d'accès (implémenter canAccessDocument)
+      const permission = await canAccessDocument(socket.user, docId);
+      if (!permission) return socket.emit({ ok: false, reason: "forbidden" });
 
-    // Vérifier droit d'accès (implémenter canAccessDocument)
-    const ok = true //await canAccessDocument(socket.user.id, docId);
-    if (!ok) return ack?.({ ok: false, reason: "forbidden" });
-
-    const room = `document:${docId}`;
-    // join crée la room si elle n'existe pas
-    socket.join(room);
-
-    // Récupérer état initial (optionnel) : load from DB/cache
-    const initialState = {}//await loadDocumentSnapshot(docId);
-
-    // Nombre de membres dans la room
-    const clients = io.sockets.adapter.rooms.get(room);
-    const membersCount = clients ? clients.size : 0;
-
-    // Notifier le client qu'il a rejoint
-    ack?.({ ok: true, docId, membersCount, initialState });
-
-    // Notifier les autres membres
-    socket.to(room).emit("presence", {
-      type: "joined",
-      userId: socket.user.id,
-      socketId: socket.id,
-      membersCount,
-    });
+  
+      // Récupérer état initial (optionnel) : load from DB/cache
+      const initialState = await loadDocumentSnapshot(socket.user, docId);
+      if (!initialState) return socket.emit({ ok: false, reason: "forbidden" });
+      if (initialState.type === "text") {
+        const room = `document:${docId}`;
+        // join crée la room si elle n'existe pas
+        socket.join(room);
+        // Nombre de membres dans la room
+        const clients = io.sockets.adapter.rooms.get(room);
+        const membersCount = clients ? clients.size : 0;
+    
+        // Notifier le client qu'il a rejoint
+        socket.emit({ ok: true, docId, membersCount, initialState });
+    
+        // Notifier les autres membres
+        socket.to(room).emit("presence", {
+          type: "joined",
+          userId: socket.user.id,
+          socketId: socket.id,
+          membersCount,
+        });
+      } else {
+        return socket.emit({ ok: false, reason: "unsupported_document_type" });
+      }
+    } catch (error) {
+      console.error("Error in join-document:", error);
+      return socket.emit({ ok: false, reason: "internal_error" });
+    }
   });
 
   // Exemple d'édition (diff/delta)
-  socket.on("doc-change", async ({ docId, delta }, ack) => {
-    const room = `document:${docId}`;
-    // Validation & autorisation rapide
-    if (!socket.rooms.has(room)) return ack?.({ ok: false, reason: "not_in_room" });
+  socket.on("doc-change", async ({ docId, delta }) => {
+    try {
+      const room = `document:${docId}`;
+      // Validation & autorisation rapide
+      if (!socket.rooms.has(room)) return socket.emit({ ok: false, reason: "not_in_room" });
+  
+      // Appliquer/persister le delta (optimiste ou via CRDT)
+      //await persistDelta(docId, delta, socket.user.id);
+  
+      // Broadcast à la room (sauf l'émetteur)
+      socket.to(room).emit("doc-change", { docId, delta, author: socket.user.id });
+  
+      socket.emit({ ok: true });
+    } catch (error) {
+      console.error("Error in join-document:", error);
+      return socket.emit({ ok: false, reason: "internal_error" });
+    }
+  });
 
-    // Appliquer/persister le delta (optimiste ou via CRDT)
-    //await persistDelta(docId, delta, socket.user.id);
+  socket.on("ping", () => {
+    console.log("ping from", socket.id);
+    socket.emit("pong");
+  });
 
-    // Broadcast à la room (sauf l'émetteur)
-    socket.to(room).emit("doc-change", { docId, delta, author: socket.user.id });
-
-    ack?.({ ok: true });
+ socket.on("message", (payload) => {
+    console.log("raw message from", socket.id, payload);
+    // Par défaut, socket.send envoie l'événement "message"
   });
 
   socket.on("disconnect", (reason) => {
