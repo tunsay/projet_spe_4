@@ -99,6 +99,14 @@ router.delete("/:id", (req, res) => res.status(204).send());
  *     summary: Upload d'un document non textuel (PDF, image, …)
  *     tags:
  *       - Documents
+ *     parameters:
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
  *     requestBody:
  *       required: true
  *       content:
@@ -134,6 +142,8 @@ router.delete("/:id", (req, res) => res.status(204).send());
  *                   type: string
  *       '400':
  *         description: Fichier manquant
+ *       '401':
+ *         description: User ID requis
  */
 router.post("/file", upload.single("file"), async (req, res) => {
   try {
