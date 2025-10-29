@@ -866,7 +866,59 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-
+/**
+ * @openapi
+ * /documents/{id}/permissionByUser:
+ *   get:
+ *     summary: Récupère la permission d'un utilisateur sur un document
+ *     tags:
+ *       - Documents
+ *       - Permissions
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID du document
+ *       - in: query
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur
+ *     responses:
+ *       '200':
+ *         description: Permission trouvée
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user_id:
+ *                   type: string
+ *                   format: uuid
+ *                   description: UUID de l'utilisateur
+ *                 document_id:
+ *                   type: string
+ *                   format: uuid
+ *                   description: UUID du document
+ *                 permission:
+ *                   type: string
+ *                   enum:
+ *                     - read
+ *                     - edit
+ *                     - owner
+ *                   description: Niveau de permission
+ *       '400':
+ *         description: ID ou UserId invalide
+ *       '404':
+ *         description: Aucun droit trouvé pour cet utilisateur
+ *       '500':
+ *         description: Erreur serveur interne
+ */
 router.get("/:id/permissionByUser", async (req, res) => {
   try {
     const { id } = req.params;
