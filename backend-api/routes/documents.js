@@ -284,6 +284,15 @@ router.post("/file", upload.single("file"), async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
+ *           format: uuid
+ *         description: UUID du document à remplacer
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
  *     requestBody:
  *       required: true
  *       content:
@@ -296,7 +305,7 @@ router.post("/file", upload.single("file"), async (req, res) => {
  *                 format: binary
  *     responses:
  *       '200':
- *         description: OK
+ *         description: Document remplacé avec succès
  *         content:
  *           application/json:
  *             schema:
@@ -308,10 +317,108 @@ router.post("/file", upload.single("file"), async (req, res) => {
  *                   type: string
  *                 type:
  *                   type: string
+ *                 mime_type:
+ *                   type: string
+ *                 owner_id:
+ *                   type: string
+ *                 updated_at:
+ *                   type: string
+ *       '400':
+ *         description: Fichier manquant
+ *       '401':
+ *         description: User ID requis
+ *       '403':
+ *         description: Accès refusé (pas propriétaire)
+ *       '404':
+ *         description: Document non trouvé
  */
-router.put("/file/:id", (req, res) =>
-    res.json({ id: req.params.id, name: "file.pdf", type: "file" })
-);
+router.put("/file/:id", upload.single("file"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const owner_id = req.headers["user-id"];
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Fichier requis" });
+    }
+
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(owner_id)) {
+      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier que le document existe
+    const docCheck = await pool.query(
+      `SELECT id, file_path, owner_id FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const oldDoc = docCheck.rows[0];
+
+    // Vérifier les permissions (propriétaire ou admin)
+    const permCheck = await pool.query(
+      `SELECT d.owner_id, u.role 
+       FROM "documents" d
+       JOIN "users" u ON u.id = $1
+       WHERE d.id = $2`,
+      [owner_id, id]
+    );
+
+    if (permCheck.rows.length === 0) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    const permission = permCheck.rows[0];
+    const isOwner = permission.owner_id === owner_id;
+    const isAdmin = permission.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Seul le propriétaire peut remplacer ce document" });
+    }
+
+    // Supprimer l'ancien fichier
+    if (oldDoc.file_path) {
+      fs.unlink(oldDoc.file_path, (err) => {
+        if (err) console.error("Erreur suppression ancien fichier:", err);
+      });
+    }
+
+    // Mettre à jour le document
+    const fileName = req.file.originalname;
+    const mimeType = req.file.mimetype;
+    const filePath = req.file.path;
+
+    const result = await pool.query(
+      `UPDATE "documents" 
+       SET name = $1, mime_type = $2, file_path = $3, last_modified_by_id = $4, last_modified_at = NOW()
+       WHERE id = $5
+       RETURNING id, name, type, mime_type, owner_id, last_modified_at`,
+      [fileName, mimeType, filePath, owner_id, id]
+    );
+
+    const document = result.rows[0];
+
+    res.status(200).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      mime_type: document.mime_type,
+      owner_id: document.owner_id,
+      updated_at: document.last_modified_at,
+    });
+  } catch (err) {
+    console.error("Erreur remplacement fichier:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
 
 /**
  * @openapi
