@@ -95,6 +95,8 @@ io.on("connection", (socket) => {
   });
 });
 
-io.listen(process.env.PORT_WS || 3006);
+io.listen(process.env.WS_PORT || 3001);
+
+console.log(`WebSocket server listening on port ${process.env.WS_PORT || 3001}`);
 
 export default io;
