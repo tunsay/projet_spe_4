@@ -590,7 +590,7 @@ router.get("/:id", async (req, res) => {
  * @openapi
  * /documents/{id}:
  *   delete:
- *     summary: Supprime un document
+ *     summary: Supprime un document et ses enfants (si dossier)
  *     tags:
  *       - Documents
  *     parameters:
@@ -610,7 +610,7 @@ router.get("/:id", async (req, res) => {
  *         description: UUID de l'utilisateur connecté
  *     responses:
  *       '204':
- *         description: Supprimé avec succès
+ *         description: Supprimé avec succès (et tous ses enfants si dossier)
  *       '403':
  *         description: Accès refusé (pas propriétaire)
  *       '404':
@@ -627,9 +627,15 @@ router.delete("/:id", async (req, res) => {
       return res.status(401).json({ error: "User ID requis (header: user-id)" });
     }
 
-    // Vérifier que le document existe et appartient à l'utilisateur
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier que le document existe
     const docCheck = await pool.query(
-      `SELECT id, file_path, type FROM "documents" WHERE id = $1`,
+      `SELECT id, type FROM "documents" WHERE id = $1`,
       [id]
     );
 
@@ -660,16 +666,38 @@ router.delete("/:id", async (req, res) => {
       return res.status(403).json({ error: "Seul le propriétaire peut supprimer ce document" });
     }
 
-    // Supprimer le fichier du système de fichiers si c'est un fichier
-    if (doc.type === "file" && doc.file_path) {
-      fs.unlink(doc.file_path, (err) => {
-        if (err) console.error("Erreur suppression fichier:", err);
-      });
+    // Récupérer tous les fichiers à supprimer du système (récursivement)
+    const filesToDelete = await pool.query(
+      `WITH RECURSIVE hierarchy AS (
+        SELECT id, file_path, type FROM "documents" WHERE id = $1
+        UNION
+        SELECT d.id, d.file_path, d.type FROM "documents" d
+        JOIN hierarchy h ON d.parent_id = h.id
+      )
+      SELECT id, file_path FROM hierarchy WHERE file_path IS NOT NULL`,
+      [id]
+    );
+
+    // Supprimer les fichiers du système de fichiers
+    for (const file of filesToDelete.rows) {
+      if (file.file_path) {
+        fs.unlink(file.file_path, (err) => {
+          if (err) console.error(`Erreur suppression fichier ${file.file_path}:`, err);
+        });
+      }
     }
 
-    // Supprimer le document et ses enfants (cascade)
+    // Supprimer le document et tous ses enfants (CASCADE via trigger ou ON DELETE CASCADE)
     await pool.query(
-      `DELETE FROM "documents" WHERE id = $1`,
+      `DELETE FROM "documents" WHERE id = $1 OR parent_id IN (
+        WITH RECURSIVE hierarchy AS (
+          SELECT id FROM "documents" WHERE id = $1
+          UNION
+          SELECT d.id FROM "documents" d
+          JOIN hierarchy h ON d.parent_id = h.id
+        )
+        SELECT id FROM hierarchy
+      )`,
       [id]
     );
 
