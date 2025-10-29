@@ -710,6 +710,156 @@ router.delete("/:id", async (req, res) => {
 
 /**
  * @openapi
+ * /documents/{id}:
+ *   put:
+ *     summary: Modifie le contenu d'un document textuel
+ *     tags:
+ *       - Documents
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID du document textuel à modifier
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - content
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 description: Nouveau contenu du document textuel
+ *     responses:
+ *       '200':
+ *         description: Document modifié avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                 owner_id:
+ *                   type: string
+ *                 parent_id:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                 updated_at:
+ *                   type: string
+ *       '400':
+ *         description: Contenu manquant ou type invalide
+ *       '401':
+ *         description: User ID requis
+ *       '403':
+ *         description: Accès refusé (pas propriétaire)
+ *       '404':
+ *         description: Document non trouvé
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const owner_id = req.headers["user-id"];
+    const { content } = req.body;
+
+    if (!owner_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
+
+    if (content === undefined) {
+      return res.status(400).json({ error: "Contenu requis" });
+    }
+
+    // Valider UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(owner_id)) {
+      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier que le document existe ET qu'il est de type 'text'
+    const docCheck = await pool.query(
+      `SELECT id, type FROM "documents" WHERE id = $1`,
+      [id]
+    );
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    const doc = docCheck.rows[0];
+
+    // Vérifier que c'est un document textuel
+    if (doc.type !== "text") {
+      return res.status(400).json({ error: "Ce document n'est pas de type textuel" });
+    }
+
+    // Vérifier les permissions (propriétaire ou admin)
+    const permCheck = await pool.query(
+      `SELECT d.owner_id, u.role 
+       FROM "documents" d
+       JOIN "users" u ON u.id = $1
+       WHERE d.id = $2`,
+      [owner_id, id]
+    );
+
+    if (permCheck.rows.length === 0) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    const permission = permCheck.rows[0];
+    const isOwner = permission.owner_id === owner_id;
+    const isAdmin = permission.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Seul le propriétaire peut modifier ce document" });
+    }
+
+    // Mettre à jour le contenu
+    const result = await pool.query(
+      `UPDATE "documents" 
+       SET content = $1, last_modified_by_id = $2, last_modified_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, type, owner_id, parent_id, content, last_modified_at`,
+      [content, owner_id, id]
+    );
+
+    const document = result.rows[0];
+
+    res.status(200).json({
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      owner_id: document.owner_id,
+      parent_id: document.parent_id,
+      content: document.content,
+      updated_at: document.last_modified_at,
+    });
+  } catch (err) {
+    console.error("Erreur modification document:", err);
+    res.status(500).json({ error: "Erreur serveur interne" });
+  }
+});
+
+
+/**
+ * @openapi
  * /documents/file:
  *   post:
  *     summary: Upload d'un document non textuel (PDF, image, …)
