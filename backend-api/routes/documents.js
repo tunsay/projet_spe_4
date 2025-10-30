@@ -20,14 +20,6 @@ const upload = multer({
  *     summary: Liste des dossiers et fichiers accessibles avec hiérarchie
  *     tags:
  *       - Documents
- *     parameters:
- *       - in: header
- *         name: user-id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: UUID de l'utilisateur connecté
  *     responses:
  *       '200':
  *         description: OK
@@ -62,18 +54,6 @@ const upload = multer({
  */
 router.get("/", async (req, res) => {
   try {
-    const owner_id = req.headers["user-id"];
-
-    if (!owner_id) {
-      return res.status(401).json({ error: "User ID requis (header: user-id)" });
-    }
-
-    // Valider UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(owner_id)) {
-      return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
-    }
-
     // Fonction récursive pour construire la hiérarchie
     const buildHierarchy = async (parentId) => {
       const result = await pool.query(
@@ -86,9 +66,9 @@ router.get("/", async (req, res) => {
           d.created_at,
           d.mime_type
         FROM "documents" d
-        WHERE d.owner_id = $1 AND d.parent_id ${parentId ? "= $2" : "IS NULL"}
+        WHERE d.parent_id ${parentId ? "= $1" : "IS NULL"}
         ORDER BY d.created_at DESC`,
-        parentId ? [owner_id, parentId] : [owner_id]
+        parentId ? [parentId] : []
       );
 
       const documents = [];
