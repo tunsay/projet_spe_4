@@ -20,6 +20,14 @@ const upload = multer({
  *     summary: Liste des dossiers et fichiers accessibles avec hiérarchie
  *     tags:
  *       - Documents
+ *     parameters:
+ *       - in: header
+ *         name: user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID de l'utilisateur connecté
  *     responses:
  *       '200':
  *         description: OK
