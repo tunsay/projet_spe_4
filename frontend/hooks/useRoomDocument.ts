@@ -19,7 +19,7 @@ type DocChangeEvent = {
 
 export default function useRoomDocument(documentId: string) {
     // Use the shared socket for the document
-    const { socket, connect, disconnect, on, off, once } = useSocket(documentId);
+    const { socket, connect, on, off } = useSocket(documentId);
 
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
@@ -67,9 +67,7 @@ export default function useRoomDocument(documentId: string) {
         // connected when this hook is used on a page.
         const tryJoin = () => {
             try {
-                socket.emit("join-document", { docId: documentId }, (response: any) => {
-                    console.log("response", response);
-                });
+                socket.emit("join-document", { docId: documentId }, (response: any) => handlePossibleJoinPayload(response));
             } catch (e) {
                 console.error("Error emitting join-document", e);
             }
@@ -101,18 +99,18 @@ export default function useRoomDocument(documentId: string) {
 
         // Listen for events using the useSocket-provided helpers so listeners are
         // attached to the current shared socket reference.
-        //on("message", handlePossibleJoinPayload);
-        //on("presence", handlePresence);
-        //on("doc-change", handleDocChange);
+        on("message", handlePossibleJoinPayload);
+        on("presence", handlePresence);
+        on("doc-change", handleDocChange);
         on("connect", handleConnect);
         on("disconnect", handleDisconnect);
 
         return () => {
             mounted = false;
             try {
-                //off("message", handlePossibleJoinPayload);
-                //off("presence", handlePresence);
-                //off("doc-change", handleDocChange);
+                off("message", handlePossibleJoinPayload);
+                off("presence", handlePresence);
+                off("doc-change", handleDocChange);
                 off("connect", handleConnect);
                 off("disconnect", handleDisconnect);
             } catch (e) {
@@ -149,6 +147,6 @@ export default function useRoomDocument(documentId: string) {
         lastPresence,
         lastDocChange,
         joinError,
-        sendChange: () => {},
+        sendChange,
     };
 }

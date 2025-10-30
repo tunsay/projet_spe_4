@@ -101,15 +101,19 @@ io.on("connection", (socket) => {
     try {
       const room = `document:${docId}`;
       // Validation & autorisation rapide
-      if (!socket.rooms.has(room)) return respond({ ok: false, reason: "not_in_room" }, cb);
+      if (!socket.rooms.has(room)) {
+        console.log("user", socket.id, "user:", socket.user?.id, "doc change - ", "room", room, "docId", docId, " - not_exist");
+        return respond({ ok: false, reason: "not_exist" }, cb);
+      }
   
       // Appliquer/persister le delta (optimiste ou via CRDT)
       //await persistDelta(docId, delta, socket.user.id);
   
       // Broadcast à la room (sauf l'émetteur)
       socket.to(room).emit("doc-change", { docId, delta, author: socket.user.id });
-  
+
       respond({ ok: true }, cb);
+      console.log("user", socket.id, "user:", socket.user?.id, "doc change - ", "room", room, "docId", docId, " - success");
     } catch (error) {
       console.error("Error in join-document:", error);
       return respond({ ok: false, reason: "internal_error" }, cb);
