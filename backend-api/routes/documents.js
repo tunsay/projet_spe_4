@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const db = require("../models");
+const Document = db.Document;
 const DocumentPermission = db.DocumentPermission;
 const CollaborationSession = db.CollaborationSession;
 
@@ -69,24 +70,24 @@ router.get("/", async (req, res) => {
 
     // Fonction récursive pour construire la hiérarchie
     const buildHierarchy = async (parentId) => {
-      const result = await pool.query(
-        `SELECT 
-          d.id, 
-          d.name, 
-          d.type, 
-          d.owner_id, 
-          d.parent_id,
-          d.created_at,
-          d.mime_type
-        FROM "documents" d
-        WHERE d.owner_id = $1 
-        AND d.parent_id ${parentId ? "= $2" : "IS NULL"}
-        ORDER BY d.created_at DESC`,
-        parentId ? [userId, parentId] : [userId]
-      );
+      
+      const documents = await Document.findAll({
+        where: {
+          parent_id : parentId
+        },
+        include: [
+          {
+            association: "permissions",
+            required: true,
+            where : {
+              user_id: userId
+            }
+          }
+        ]
+      })
 
-      const documents = [];
-      for (const doc of result.rows) {
+      const ndocuments = [];
+      for (const doc of documents) {
         const docObj = {
           id: doc.id,
           name: doc.name,
@@ -106,10 +107,10 @@ router.get("/", async (req, res) => {
           docObj.children = await buildHierarchy(doc.id);
         }
 
-        documents.push(docObj);
+        ndocuments.push(docObj);
       }
 
-      return documents;
+      return ndocuments;
     };
 
     const documents = await buildHierarchy(null);
@@ -197,7 +198,7 @@ router.post("/", async (req, res) => {
 
     // Vérifier que owner_id est fourni
     if (!owner_id) {
-      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+      return res.status(401).json({ error: "Connexion obligatoire" });
     }
 
     // Vérifier les données requises
@@ -498,7 +499,6 @@ router.put("/:id/metadata", async (req, res) => {
   }
 });
 
-
 /**
  * @openapi
  * /documents/{id}:
@@ -566,18 +566,6 @@ router.get("/:id", async (req, res) => {
       return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
     }
 
-    // Vérifier les permission
-    const permission = await DocumentPermission.findOne({
-      where: {
-        user_id : user_id,
-        document_id : id
-      }
-    })
-
-    if (!permission) {
-      return res.status(403).json({ error: "Accès refusé" });
-    }
-
     // Récupérer le document
     const result = await pool.query(
       `SELECT 
@@ -597,6 +585,18 @@ router.get("/:id", async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Document non trouvé" });
+    }
+
+    // Vérifier les permission
+    const permission = await DocumentPermission.findOne({
+      where: {
+        user_id : user_id,
+        document_id : id
+      }
+    })
+
+    if (!permission) {
+      return res.status(403).json({ error: "Accès refusé" });
     }
 
     const document = result.rows[0];
@@ -895,7 +895,7 @@ router.delete("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.headers["user-id"];
+    const owner_id = req.userId;
     const { content } = req.body;
 
     if (!owner_id) {
@@ -929,25 +929,16 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "Ce document n'est pas de type textuel" });
     }
 
-    // Vérifier les permissions (propriétaire ou admin)
-    const permCheck = await pool.query(
-      `SELECT d.owner_id, u.role 
-       FROM "documents" d
-       JOIN "users" u ON u.id = $1
-       WHERE d.id = $2`,
-      [owner_id, id]
-    );
+    // Vérifier les permission
+    const permission = await DocumentPermission.findOne({
+      where: {
+        user_id : user_id,
+        document_id : id
+      }
+    })
 
-    if (permCheck.rows.length === 0) {
+    if (!permission) {
       return res.status(403).json({ error: "Accès refusé" });
-    }
-
-    const permission = permCheck.rows[0];
-    const isOwner = permission.owner_id === owner_id;
-    const isAdmin = permission.role === "admin";
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ error: "Seul le propriétaire peut modifier ce document" });
     }
 
     // Mettre à jour le contenu
@@ -1304,7 +1295,7 @@ router.get("/file/:id/download", async (req, res) => {
 router.put("/file/:id", upload.single("file"), async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.headers["user-id"];
+    const owner_id = req.userId;
 
     if (!req.file) {
       return res.status(400).json({ error: "Fichier requis" });
@@ -1460,7 +1451,7 @@ router.post("/:id/invite", async (req, res) => {
     const { email, permission } = req.body;
 
     if (!owner_id) {
-      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+      return res.status(401).json({ error: "Connexion requise" });
     }
 
     if (!email || !permission) {
