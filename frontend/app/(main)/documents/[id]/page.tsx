@@ -1,35 +1,52 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    Fragment,
+    FormEvent,
+    ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import { buildApiUrl } from "@/lib/api";
+import { DocumentToolbar } from "../_components/DocumentToolbar";
+import { DocumentTextSection } from "../_components/DocumentTextSection";
+import { DocumentSummarySection } from "../_components/DocumentSummarySection";
+import { CollaborationSidebar } from "../_components/CollaborationSidebar";
+import { InviteCollaboratorModal } from "../_components/InviteCollaboratorModal";
+import {
+    ChatMessageEntry,
+    DocumentDetail,
+    FeedbackMessage,
+    Profile,
+    SaveState,
+    SessionParticipantEntry,
+} from "../types";
 
-interface DocumentDetail {
-    id: string;
-    name: string;
-    type: "text" | "folder" | "file";
-    owner_id: string;
-    parent_id: string | null;
-    created_at: string;
-    last_modified_at?: string | null;
-    content?: string | null;
-    mime_type?: string | null;
-}
+const normalizeErrorMessage = (value: unknown, fallback: string) => {
+    if (
+        value &&
+        typeof value === "object" &&
+        "error" in value &&
+        typeof (value as { error?: unknown }).error === "string"
+    ) {
+        return (value as { error: string }).error;
+    }
 
-interface Profile {
-    id: string;
-    name?: string | null;
-    email: string;
-    role: "admin" | "user";
-}
+    if (
+        value &&
+        typeof value === "object" &&
+        "message" in value &&
+        typeof (value as { message?: unknown }).message === "string"
+    ) {
+        return (value as { message: string }).message;
+    }
 
-interface Message {
-    type: "success" | "error";
-    text: string;
-}
-
-type SaveState = "idle" | "saving" | "saved" | "error";
+    return fallback;
+};
 
 export default function DocumentDetailPage() {
     const router = useRouter();
@@ -47,12 +64,44 @@ export default function DocumentDetailPage() {
     const [content, setContent] = useState<string>("");
     const [persistedContent, setPersistedContent] = useState<string>("");
     const [loading, setLoading] = useState(true);
-    const [message, setMessage] = useState<Message | null>(null);
+    const [message, setMessage] = useState<FeedbackMessage | null>(null);
     const [saveState, setSaveState] = useState<SaveState>("idle");
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
+    const [participants, setParticipants] = useState<SessionParticipantEntry[]>(
+        []
+    );
+    const [participantsLoading, setParticipantsLoading] = useState(false);
+    const [participantsError, setParticipantsError] = useState<string | null>(
+        null
+    );
+    const [messagesList, setMessagesList] = useState<ChatMessageEntry[]>([]);
+    const [messagesLoading, setMessagesLoading] = useState(false);
+    const [messagesError, setMessagesError] = useState<string | null>(null);
+    const [newMessage, setNewMessage] = useState("");
+    const [sendingMessage, setSendingMessage] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState("");
+    const [invitePermission, setInvitePermission] =
+        useState<"read" | "edit" | "owner">("edit");
+    const [inviteFeedback, setInviteFeedback] =
+        useState<FeedbackMessage | null>(null);
+    const [inviteLoading, setInviteLoading] = useState(false);
+    const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+
     const isTextDocument = doc?.type === "text";
+    const isOwner = doc && profile ? doc.owner_id === profile.id : false;
+
+    const ownerDisplayName = useMemo(() => {
+        if (!doc) return "";
+        if (profile && doc.owner_id === profile.id) {
+            return profile.name || "Vous";
+        }
+        const owner =
+            participants.find((item) => item.userId === doc.owner_id) ??
+            participants.find((item) => item.email === doc.owner_id);
+        return owner?.displayName ?? "Propriétaire";
+    }, [doc, participants, profile]);
 
     const downloadUrl = useMemo(() => {
         if (!doc) return null;
@@ -69,6 +118,18 @@ export default function DocumentDetailPage() {
         if (!downloadUrl) return null;
         return `${downloadUrl}${downloadUrl.includes("?") ? "&" : "?"}inline=1`;
     }, [downloadUrl]);
+
+    const withUserHeaders = useCallback(
+        (extra: HeadersInit = {}) => {
+            if (!profile?.id) return extra;
+            return {
+                ...extra,
+                "user-id": profile.id,
+                "X-User-ID-Test": profile.id,
+            };
+        },
+        [profile?.id]
+    );
 
     const handleOpenInBrowser = useCallback(() => {
         if (!inlinePreviewUrl) return;
@@ -99,18 +160,33 @@ export default function DocumentDetailPage() {
                 return null;
             }
 
-            if (!response.ok) {
-                throw new Error("Impossible de récupérer le profil.");
+            let payload: unknown = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
             }
 
-            const data = (await response.json()) as Profile;
+            if (!response.ok) {
+                throw new Error(
+                    normalizeErrorMessage(
+                        payload,
+                        "Impossible de récupérer le profil."
+                    )
+                );
+            }
+
+            const data = payload as Profile;
             setProfile(data);
             return data;
         } catch (error) {
             console.error("Erreur profil:", error);
             setMessage({
                 type: "error",
-                text: "Une erreur est survenue lors du chargement du profil.",
+                text:
+                    error instanceof Error
+                        ? error.message
+                        : "Une erreur est survenue lors du chargement du profil.",
             });
             return null;
         }
@@ -137,10 +213,6 @@ export default function DocumentDetailPage() {
             }
 
             if (response.status === 404) {
-                console.warn(
-                    "Document introuvable ou accès refusé pour l'id :",
-                    documentId
-                );
                 setDoc(null);
                 setMessage({
                     type: "error",
@@ -149,11 +221,23 @@ export default function DocumentDetailPage() {
                 return;
             }
 
-            if (!response.ok) {
-                throw new Error("Impossible de charger le document.");
+            let payload: unknown = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
             }
 
-            const data = (await response.json()) as DocumentDetail;
+            if (!response.ok) {
+                throw new Error(
+                    normalizeErrorMessage(
+                        payload,
+                        "Impossible de charger le document."
+                    )
+                );
+            }
+
+            const data = payload as DocumentDetail;
             setDoc(data);
 
             const initial = data.content ?? "";
@@ -163,11 +247,7 @@ export default function DocumentDetailPage() {
                 data.last_modified_at ? new Date(data.last_modified_at) : null
             );
         } catch (error) {
-            console.error(
-                "Erreur lors du chargement du document",
-                documentId,
-                error
-            );
+            console.error("Erreur document:", error);
             setMessage({
                 type: "error",
                 text:
@@ -180,65 +260,11 @@ export default function DocumentDetailPage() {
         }
     }, [documentId, router]);
 
-    useEffect(() => {
-        if (!documentId) {
-            setMessage({
-                type: "error",
-                text: "Identifiant de document introuvable dans l'URL.",
-            });
-            setLoading(false);
-            return;
-        }
-
-        const bootstrap = async () => {
-            const prof = await fetchProfile();
-            if (prof) {
-                await fetchDocument();
-            }
-        };
-
-        bootstrap();
-    }, [documentId, fetchProfile, fetchDocument]);
-
-    useEffect(() => {
-        if (!isTextDocument) return;
-        if (content === persistedContent) return;
-
-        setSaveState("idle");
-
-        if (saveTimeout.current) {
-            clearTimeout(saveTimeout.current);
-        }
-
-        saveTimeout.current = setTimeout(() => {
-            handleSave(content);
-        }, 1500);
-
-        return () => {
-            if (saveTimeout.current) {
-                clearTimeout(saveTimeout.current);
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [content, persistedContent, isTextDocument]);
-
-    const withUserHeaders = useCallback(
-        (extra: HeadersInit = {}) => {
-            if (!profile?.id) return extra;
-            return {
-                ...extra,
-                "user-id": profile.id,
-                "X-User-ID-Test": profile.id,
-            };
-        },
-        [profile?.id]
-    );
-
     const handleSave = useCallback(
         async (nextContent?: string) => {
             if (!doc || doc.type !== "text") return;
 
-            const payload = nextContent ?? content;
+            const payload = typeof nextContent === "string" ? nextContent : content;
             if (payload === persistedContent) return;
 
             setSaveState("saving");
@@ -255,11 +281,24 @@ export default function DocumentDetailPage() {
                     }
                 );
 
+                if (response.status === 401) {
+                    router.replace("/login");
+                    return;
+                }
+
+                let body: unknown = null;
+                try {
+                    body = await response.json();
+                } catch {
+                    body = null;
+                }
+
                 if (!response.ok) {
-                    const body = await response.json().catch(() => ({}));
                     throw new Error(
-                        (body as { error?: string }).error ??
+                        normalizeErrorMessage(
+                            body,
                             "Impossible d'enregistrer le document."
+                        )
                     );
                 }
 
@@ -282,7 +321,474 @@ export default function DocumentDetailPage() {
                 });
             }
         },
-        [doc, content, persistedContent, withUserHeaders]
+        [doc, content, persistedContent, withUserHeaders, router]
+    );
+
+    const fetchParticipants = useCallback(async () => {
+        if (!documentId) return;
+        setParticipantsLoading(true);
+        setParticipantsError(null);
+
+        try {
+            const response = await fetch(
+                buildApiUrl(`/api/sessions/${documentId}`),
+                {
+                    credentials: "include",
+                }
+            );
+
+            if (response.status === 401) {
+                router.replace("/login");
+                return;
+            }
+
+            let payload: unknown = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    normalizeErrorMessage(
+                        payload,
+                        "Impossible de récupérer les participants."
+                    )
+                );
+            }
+
+            const rawList = Array.isArray(
+                (payload as { participants?: unknown }).participants
+            )
+                ? ((payload as { participants: unknown[] }).participants as unknown[])
+                : [];
+
+            const normalized: SessionParticipantEntry[] = rawList.map(
+                (item, index) => {
+                    if (!item || typeof item !== "object") {
+                        return {
+                            userId: `participant-${index}`,
+                            displayName: "Collaborateur",
+                            email: "",
+                        };
+                    }
+
+                    const participant = item as Record<string, unknown>;
+                    const rawUser =
+                        (participant.user as Record<string, unknown> | undefined) ??
+                        (participant.User as Record<string, unknown> | undefined);
+
+                    const email =
+                        (typeof participant.email === "string" && participant.email) ||
+                        (rawUser && typeof rawUser.email === "string"
+                            ? rawUser.email
+                            : "");
+
+                    const displayName =
+                        (rawUser &&
+                            typeof rawUser.display_name === "string" &&
+                            rawUser.display_name) ||
+                        (rawUser &&
+                            typeof rawUser.displayName === "string" &&
+                            rawUser.displayName) ||
+                        (typeof participant.display_name === "string" &&
+                            participant.display_name) ||
+                        (typeof participant.displayName === "string" &&
+                            participant.displayName) ||
+                        email ||
+                        "Collaborateur";
+
+                    const userId =
+                        (typeof participant.user_id === "string" && participant.user_id) ||
+                        (typeof participant.userId === "string" && participant.userId) ||
+                        (rawUser && typeof rawUser.id === "string" && rawUser.id) ||
+                        (rawUser &&
+                            typeof rawUser.user_id === "string" &&
+                            rawUser.user_id) ||
+                        email ||
+                        `participant-${index}`;
+
+                    return {
+                        userId,
+                        displayName,
+                        email,
+                    };
+                }
+            );
+
+            setParticipants(normalized);
+        } catch (error) {
+            console.error("Erreur participants:", error);
+            setParticipantsError(
+                error instanceof Error
+                    ? error.message
+                    : "Impossible de charger les participants."
+            );
+        } finally {
+            setParticipantsLoading(false);
+        }
+    }, [documentId, router]);
+
+    const fetchMessages = useCallback(async () => {
+        if (!documentId) return;
+
+        setMessagesLoading(true);
+        setMessagesError(null);
+
+        try {
+            const response = await fetch(
+                buildApiUrl(`/api/messages/${documentId}`),
+                {
+                    credentials: "include",
+                }
+            );
+
+            if (response.status === 401) {
+                router.replace("/login");
+                return;
+            }
+
+            let payload: unknown = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    normalizeErrorMessage(
+                        payload,
+                        "Impossible de récupérer les messages."
+                    )
+                );
+            }
+
+            const rawList = Array.isArray(
+                (payload as { messages?: unknown }).messages
+            )
+                ? ((payload as { messages: unknown[] }).messages as unknown[])
+                : [];
+
+            const normalized = rawList
+                .map((item, index): ChatMessageEntry => {
+                    if (!item || typeof item !== "object") {
+                        return {
+                            id: `message-${index}`,
+                            content: "",
+                            user_id: "",
+                            created_at: new Date().toISOString(),
+                        };
+                    }
+
+                    const record = item as Record<string, unknown>;
+                    const createdAtRaw =
+                        (typeof record.created_at === "string" && record.created_at) ||
+                        (typeof record.createdAt === "string" && record.createdAt) ||
+                        new Date().toISOString();
+
+                    return {
+                        id:
+                            (typeof record.id === "number" || typeof record.id === "string") &&
+                            record.id !== ""
+                                ? (record.id as number | string)
+                                : `message-${index}`,
+                        content:
+                            (typeof record.content === "string" && record.content) || "",
+                        user_id:
+                            (typeof record.user_id === "string" && record.user_id) || "",
+                        created_at: createdAtRaw,
+                    };
+                })
+                .sort((a, b) => {
+                    const aTime = new Date(a.created_at).getTime();
+                    const bTime = new Date(b.created_at).getTime();
+                    if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+                        return 0;
+                    }
+                    return aTime - bTime;
+                });
+
+            setMessagesList(normalized);
+        } catch (error) {
+            console.error("Erreur messages:", error);
+            setMessagesError(
+                error instanceof Error
+                    ? error.message
+                    : "Impossible de charger les messages."
+            );
+        } finally {
+            setMessagesLoading(false);
+        }
+    }, [documentId, router]);
+
+    useEffect(() => {
+        if (!documentId) {
+            setMessage({
+                type: "error",
+                text: "Identifiant de document introuvable dans l'URL.",
+            });
+            setLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        const bootstrap = async () => {
+            const prof = await fetchProfile();
+            if (!cancelled && prof) {
+                await fetchDocument();
+            }
+        };
+
+        bootstrap();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [documentId, fetchProfile, fetchDocument]);
+
+    useEffect(() => {
+        if (!doc || !documentId) return;
+        fetchParticipants();
+        fetchMessages();
+    }, [doc, documentId, fetchParticipants, fetchMessages]);
+
+    useEffect(() => {
+        if (!isTextDocument) return;
+        if (content === persistedContent) return;
+
+        setSaveState("idle");
+
+        if (saveTimeout.current) {
+            clearTimeout(saveTimeout.current);
+        }
+
+        saveTimeout.current = setTimeout(() => {
+            handleSave(content);
+        }, 1500);
+
+        return () => {
+            if (saveTimeout.current) {
+                clearTimeout(saveTimeout.current);
+            }
+        };
+    }, [content, persistedContent, isTextDocument, handleSave]);
+
+    const handleSendMessage = useCallback(
+        async (event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            if (!documentId) return;
+
+            const trimmed = newMessage.trim();
+            if (!trimmed) return;
+
+            setMessagesError(null);
+            setSendingMessage(true);
+
+            try {
+                const response = await fetch(
+                    buildApiUrl(`/api/messages/${documentId}`),
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: withUserHeaders({
+                            "Content-Type": "application/json",
+                        }),
+                        body: JSON.stringify({ content: trimmed }),
+                    }
+                );
+
+                if (response.status === 401) {
+                    router.replace("/login");
+                    return;
+                }
+
+                let payload: unknown = null;
+                try {
+                    payload = await response.json();
+                } catch {
+                    payload = null;
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        normalizeErrorMessage(
+                            payload,
+                            "Impossible d'envoyer le message."
+                        )
+                    );
+                }
+
+                const created =
+                    payload &&
+                    typeof payload === "object" &&
+                    payload !== null &&
+                    "message" in payload
+                        ? (payload as { message?: Record<string, unknown> }).message
+                        : null;
+
+                setNewMessage("");
+
+                if (created) {
+                    setMessagesList((current) => {
+                        const next: ChatMessageEntry[] = [
+                            ...current,
+                            {
+                                id:
+                                    (typeof created?.id === "number" ||
+                                        typeof created?.id === "string") &&
+                                    created?.id !== ""
+                                        ? (created?.id as number | string)
+                                        : Date.now(),
+                                content:
+                                    (typeof created?.content === "string" &&
+                                        created?.content) ||
+                                    trimmed,
+                                user_id:
+                                    (typeof created?.user_id === "string" &&
+                                        created?.user_id) ||
+                                    profile?.id ||
+                                    "",
+                                created_at:
+                                    (typeof created?.created_at === "string" &&
+                                        created?.created_at) ||
+                                    new Date().toISOString(),
+                            },
+                        ];
+
+                        return next.sort((a, b) => {
+                            const aTime = new Date(a.created_at).getTime();
+                            const bTime = new Date(b.created_at).getTime();
+                            if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+                                return 0;
+                            }
+                            return aTime - bTime;
+                        });
+                    });
+                } else {
+                    await fetchMessages();
+                }
+            } catch (error) {
+                console.error("Erreur message:", error);
+                setMessagesError(
+                    error instanceof Error
+                        ? error.message
+                        : "Impossible d'envoyer le message."
+                );
+            } finally {
+                setSendingMessage(false);
+            }
+        },
+        [
+            documentId,
+            newMessage,
+            withUserHeaders,
+            router,
+            profile?.id,
+            fetchMessages,
+        ]
+    );
+
+    const openInviteModal = useCallback(() => {
+        setInviteFeedback(null);
+        setInviteModalOpen(true);
+    }, []);
+
+    const closeInviteModal = useCallback(() => {
+        setInviteModalOpen(false);
+    }, []);
+
+    const handleInviteSubmit = useCallback(
+        async (event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            if (!doc) return;
+
+            const email = inviteEmail.trim();
+            if (!email) {
+                setInviteFeedback({
+                    type: "error",
+                    text: "Veuillez saisir une adresse e-mail valide.",
+                });
+                return;
+            }
+
+            setInviteLoading(true);
+            setInviteFeedback(null);
+
+            try {
+                const response = await fetch(
+                    buildApiUrl(`/api/documents/${doc.id}/invite`),
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: withUserHeaders({
+                            "Content-Type": "application/json",
+                        }),
+                        body: JSON.stringify({
+                            email,
+                            permission: invitePermission,
+                        }),
+                    }
+                );
+
+                if (response.status === 401) {
+                    router.replace("/login");
+                    return;
+                }
+
+                let payload: unknown = null;
+                try {
+                    payload = await response.json();
+                } catch {
+                    payload = null;
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        normalizeErrorMessage(
+                            payload,
+                            "Impossible d'envoyer l'invitation."
+                        )
+                    );
+                }
+
+                setInviteFeedback({
+                    type: "success",
+                    text:
+                        (payload &&
+                            typeof payload === "object" &&
+                            payload !== null &&
+                            "message" in payload &&
+                            typeof (payload as { message?: unknown }).message === "string"
+                            ? (payload as { message: string }).message
+                            : "Invitation envoyée avec succès."),
+                });
+                setInviteEmail("");
+                setInvitePermission("edit");
+                await fetchParticipants();
+            } catch (error) {
+                console.error("Erreur invitation:", error);
+                setInviteFeedback({
+                    type: "error",
+                    text:
+                        error instanceof Error
+                            ? error.message
+                            : "Impossible d'envoyer l'invitation.",
+                });
+            } finally {
+                setInviteLoading(false);
+            }
+        },
+        [
+            doc,
+            inviteEmail,
+            invitePermission,
+            withUserHeaders,
+            router,
+            fetchParticipants,
+        ]
     );
 
     const saveIndicator = useMemo(() => {
@@ -300,248 +806,176 @@ export default function DocumentDetailPage() {
         }
     }, [saveState, content, persistedContent]);
 
-    return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10">
-            <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4">
-                {/* --- En-tête et Indicateur de Sauvegarde --- */}
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <Link
-                            href="/documents"
-                            className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition duration-150"
-                        >
-                            ← Retour à la liste
-                        </Link>
-                        <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                            {doc ? doc.name : "Chargement…"}
-                        </h1>
-                        {doc && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Identifiant : {doc.id}
-                            </p>
-                        )}
-                    </div>
-                    {/* Indicateur de Sauvegarde Harmonisé */}
-                    <div className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-xs text-slate-500 dark:text-slate-400 shadow-sm">
-                        <div className="flex items-center gap-1">
-                            Statut :{" "}
-                            <span
-                                className={
-                                    saveState === "error"
-                                        ? "font-medium text-red-600 dark:text-red-400"
-                                        : saveState === "saving"
-                                        ? "font-medium text-slate-600 dark:text-slate-300 animate-pulse"
-                                        : "font-medium text-emerald-600 dark:text-emerald-400"
-                                }
-                            >
-                                {saveIndicator}
-                            </span>
-                        </div>
-                        {lastSavedAt && (
-                            <div className="mt-1">
-                                Dernière sauvegarde :{" "}
-                                {lastSavedAt.toLocaleTimeString()}
-                            </div>
-                        )}
-                        {isTextDocument ? (
-                            <div className="mt-3 flex flex-col gap-2">
-                                <button
-                                    onClick={() => handleSave()}
-                                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-md hover:bg-indigo-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={
-                                        saveState === "saving" ||
-                                        content === persistedContent
-                                    }
-                                >
-                                    Sauvegarder maintenant
-                                </button>
-                                {downloadUrl && (
-                                    <button
-                                        type="button"
-                                        onClick={handleDownload}
-                                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-700 transition duration-150"
-                                    >
-                                        Télécharger le document
-                                    </button>
-                                )}
-                            </div>
-                        ) : doc?.type === "file" ? (
-                            <div className="mt-3 flex flex-col gap-2">
-                                {inlinePreviewUrl && (
-                                    <button
-                                        type="button"
-                                        onClick={handleOpenInBrowser}
-                                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-700 transition duration-150"
-                                    >
-                                        Ouvrir dans le navigateur
-                                    </button>
-                                )}
-                                {downloadUrl && (
-                                    <button
-                                        type="button"
-                                        onClick={handleDownload}
-                                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-md hover:bg-indigo-700 transition duration-150"
-                                    >
-                                        Télécharger le fichier
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            downloadUrl && (
-                                <div className="mt-3">
-                                    <button
-                                        type="button"
-                                        onClick={handleDownload}
-                                        className="w-full rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-md hover:bg-indigo-700 transition duration-150"
-                                    >
-                                        Télécharger
-                                    </button>
-                                </div>
-                            )
-                        )}
-                    </div>
+    const sortedMessages = useMemo(() => {
+        return [...messagesList].sort((a, b) => {
+            const aTime = new Date(a.created_at).getTime();
+            const bTime = new Date(b.created_at).getTime();
+            if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+                return 0;
+            }
+            return aTime - bTime;
+        });
+    }, [messagesList]);
+
+    const messageAuthorLookup = useMemo(() => {
+        const map = new Map<string, string>();
+
+        participants.forEach((participant) => {
+            const key = participant.userId;
+            if (key) {
+                map.set(key, participant.displayName || participant.email || "");
+            }
+        });
+
+        if (doc?.owner_id) {
+            map.set(doc.owner_id, ownerDisplayName || doc.owner_id);
+        }
+
+        if (profile?.id) {
+            map.set(
+                profile.id,
+                profile.name || profile.email || "Vous"
+            );
+        }
+
+        return map;
+    }, [participants, doc?.owner_id, ownerDisplayName, profile?.id, profile?.name, profile?.email]);
+
+    const resolveAuthorName = useCallback(
+        (userId: string) => {
+            if (!userId) {
+                return "Collaborateur";
+            }
+
+            const fromLookup = messageAuthorLookup.get(userId);
+            if (fromLookup) {
+                return fromLookup;
+            }
+
+            if (userId === profile?.id) {
+                return profile?.name || profile?.email || "Vous";
+            }
+
+            if (userId === doc?.owner_id) {
+                return ownerDisplayName || "Propriétaire";
+            }
+
+            return "Collaborateur";
+        },
+        [messageAuthorLookup, profile?.id, profile?.name, profile?.email, doc?.owner_id, ownerDisplayName]
+    );
+
+    let mainContent: ReactNode = null;
+
+    if (loading) {
+        mainContent = (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(280px,1fr)]">
+                <div className="space-y-4">
+                    <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200 dark:bg-gray-700" />
+                    <div className="h-4 w-1/3 animate-pulse rounded bg-slate-200 dark:bg-gray-700" />
+                    <div className="h-64 animate-pulse rounded-lg bg-slate-200 dark:bg-gray-700" />
                 </div>
-
-                {/* --- Notification Message Harmonisée --- */}
-                {message && (
-                    <div
-                        className={`rounded-lg border px-4 py-3 text-sm ${
-                            message.type === "success"
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                                : "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300"
-                        }`}
-                    >
-                        {message.text}
-                    </div>
-                )}
-
-                {/* --- Rendu du Contenu Principal --- */}
-                {loading ? (
-                    <div className="space-y-4">
-                        <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200 dark:bg-gray-700" />
-                        <div className="h-4 w-1/3 animate-pulse rounded bg-slate-200 dark:bg-gray-700" />
-                        <div className="h-64 animate-pulse rounded-lg bg-slate-200 dark:bg-gray-700" />
-                    </div>
-                ) : !doc ? (
-                    // Message d'erreur/absence de document
-                    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/40 px-4 py-6 text-sm text-amber-800 dark:text-amber-300">
-                        <p className="font-semibold">
-                            Document introuvable ou inaccessible.
-                        </p>
-                        <p className="mt-1">
-                            {message?.text ??
-                                "Veuillez vérifier l'identifiant et vos droits d'accès."}
-                        </p>
-                    </div>
-                ) : doc.type === "text" ? (
-                    // Affichage et édition du contenu texte
-                    <div className="space-y-6">
-                        <div className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-lg">
-                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
-                                Contenu du document
-                                <textarea
-                                    value={content}
-                                    onChange={(e) => setContent(e.target.value)}
-                                    rows={18}
-                                    className="mt-2 w-full rounded-lg border border-slate-300 dark:border-gray-600 dark:bg-gray-900 px-3 py-2 text-sm leading-relaxed shadow-inner text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition duration-150"
-                                    placeholder="Commencez à saisir votre contenu…"
-                                />
-                            </label>
-                        </div>
-                        {/* Détails du document texte */}
-                        <div className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-slate-600 dark:text-slate-300 shadow-sm">
-                            <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-                                Détails
-                            </h2>
-                            <dl className="mt-2 space-y-1">
-                                <div>
-                                    <span className="font-medium">
-                                        Créé le :
-                                    </span>{" "}
-                                    {new Date(doc.created_at).toLocaleString()}
-                                </div>
-                                {doc.last_modified_at && (
-                                    <div>
-                                        <span className="font-medium">
-                                            Modifié le :
-                                        </span>{" "}
-                                        {new Date(
-                                            doc.last_modified_at
-                                        ).toLocaleString()}
-                                    </div>
-                                )}
-                                <div>
-                                    <span className="font-medium">
-                                        Propriétaire :
-                                    </span>{" "}
-                                    {doc.owner_id}
-                                </div>
-                            </dl>
-                        </div>
-                    </div>
-                ) : (
-                    // Affichage des autres types (dossier, fichier)
-                    <div className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-lg">
-                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">
-                            Résumé du document
-                        </h2>
-                        <dl className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                            <div>
-                                <span className="font-medium">Type :</span>{" "}
-                                {doc.type === "folder"
-                                    ? "Dossier"
-                                    : "Fichier importé"}
-                            </div>
-                            <div>
-                                <span className="font-medium">
-                                    Propriétaire :
-                                </span>{" "}
-                                {doc.owner_id}
-                            </div>
-                            <div>
-                                <span className="font-medium">Créé le :</span>{" "}
-                                {new Date(doc.created_at).toLocaleString()}
-                            </div>
-                            {doc.last_modified_at && (
-                                <div>
-                                    <span className="font-medium">
-                                        Modifié le :
-                                    </span>{" "}
-                                    {new Date(
-                                        doc.last_modified_at
-                                    ).toLocaleString()}
-                                </div>
-                            )}
-                            {doc.mime_type && (
-                                <div>
-                                    <span className="font-medium">
-                                        Type MIME :
-                                    </span>{" "}
-                                    {doc.mime_type}
-                                </div>
-                            )}
-                        </dl>
-                        {doc.type === "file" && inlinePreviewUrl && (
-                            <div className="mt-6 space-y-2">
-                                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-gray-700">
-                                    <iframe
-                                        src={inlinePreviewUrl}
-                                        title={`Aperçu de ${doc.name}`}
-                                        className="h-[600px] w-full bg-white"
-                                    />
-                                </div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Si l&apos;aperçu ne se charge pas, utilisez le bouton &laquo; Ouvrir dans le navigateur &raquo;.
-                                </p>
-                            </div>
-                        )}
-                        <p className="mt-6 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-md border border-amber-200 dark:border-amber-700">
-                            Ce type de document ({doc.type}) ne peut pas être
-                            édité directement.
-                        </p>
-                    </div>
-                )}
+                <aside className="space-y-4">
+                    <div className="h-40 animate-pulse rounded-lg bg-slate-200 dark:bg-gray-700" />
+                    <div className="h-48 animate-pulse rounded-lg bg-slate-200 dark:bg-gray-700" />
+                </aside>
             </div>
-        </div>
+        );
+    } else if (!doc) {
+        mainContent = (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-6 text-sm text-amber-800 shadow-sm dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                <p className="font-semibold">Document introuvable ou inaccessible.</p>
+                <p className="mt-1">
+                    {message?.text ??
+                        "Veuillez vérifier l'identifiant et vos droits d'accès."}
+                </p>
+            </div>
+        );
+    } else {
+        mainContent = (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]">
+                <div className="space-y-6">
+                    {doc.type === "text" ? (
+                        <DocumentTextSection
+                            document={doc}
+                            content={content}
+                            onContentChange={setContent}
+                            ownerDisplayName={ownerDisplayName}
+                        />
+                    ) : (
+                        <DocumentSummarySection
+                            document={doc}
+                            inlinePreviewUrl={inlinePreviewUrl}
+                            ownerDisplayName={ownerDisplayName}
+                        />
+                    )}
+                </div>
+                <CollaborationSidebar
+                    participants={participants}
+                    participantsLoading={participantsLoading}
+                    participantsError={participantsError}
+                    profile={profile}
+                    messages={sortedMessages}
+                    messagesLoading={messagesLoading}
+                    messagesError={messagesError}
+                    newMessage={newMessage}
+                    onNewMessageChange={setNewMessage}
+                    onSendMessage={handleSendMessage}
+                    sendingMessage={sendingMessage}
+                    isOwner={isOwner}
+                    onOpenInviteModal={openInviteModal}
+                    resolveAuthorName={resolveAuthorName}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <Fragment>
+            <div className="min-h-screen bg-gray-50 py-10 dark:bg-gray-900">
+                <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 lg:px-8">
+                    <DocumentToolbar
+                        document={doc}
+                        saveIndicator={saveIndicator}
+                        saveState={saveState}
+                        lastSavedAt={lastSavedAt}
+                        isTextDocument={isTextDocument}
+                        content={content}
+                        persistedContent={persistedContent}
+                        onSave={() => handleSave()}
+                        downloadUrl={downloadUrl}
+                        inlinePreviewUrl={inlinePreviewUrl}
+                        onDownload={handleDownload}
+                        onOpenPreview={handleOpenInBrowser}
+                    />
+
+                    {message && (
+                        <div
+                            className={`rounded-lg border px-4 py-3 text-sm ${
+                                message.type === "success"
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                    : "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300"
+                            }`}
+                        >
+                            {message.text}
+                        </div>
+                    )}
+
+                    {mainContent}
+                </div>
+            </div>
+
+            <InviteCollaboratorModal
+                isOpen={isInviteModalOpen}
+                inviteEmail={inviteEmail}
+                invitePermission={invitePermission}
+                inviteFeedback={inviteFeedback}
+                inviteLoading={inviteLoading}
+                onClose={closeInviteModal}
+                onEmailChange={setInviteEmail}
+                onPermissionChange={(value) => setInvitePermission(value)}
+                onSubmit={handleInviteSubmit}
+            />
+        </Fragment>
     );
 }
