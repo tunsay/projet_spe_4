@@ -94,6 +94,7 @@ export default function DocumentsPage() {
     const [newContent, setNewContent] = useState("");
     const [fileToUpload, setFileToUpload] = useState<File | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [selectedDocForDetails, setSelectedDocForDetails] = useState<DocumentNode | null>(null);
 
     const documentIndex = useMemo(() => indexTree(documents), [documents]);
 
@@ -500,21 +501,21 @@ export default function DocumentsPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10">
-            <div className="mx-auto max-w-6xl px-4 space-y-8">
+        <div className="bg-gray-50 dark:bg-gray-900 py-10 min-h-screen">
+            <div className="space-y-8 mx-auto px-4 max-w-6xl">
                 <header className="flex flex-col gap-3">
-                    <div className="flex items-start justify-between flex-wrap gap-4">
+                    <div className="flex flex-wrap justify-between items-start gap-4">
                         <div>
-                            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                            <h1 className="font-extrabold text-slate-900 dark:text-slate-100 text-3xl">
                                 Mes Documents
                             </h1>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">
                                 Gérez vos dossiers, vos documents textuels et collaborez avec votre équipe.
                             </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
-                                className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition duration-150"
+                                className="bg-white hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2 border border-slate-200 dark:border-gray-700 rounded-lg font-medium text-slate-700 dark:text-slate-300 text-sm transition duration-150"
                                 onClick={() => setCreationMode("folder")}
                             >
                                 <span className="flex items-center gap-2">
@@ -522,7 +523,7 @@ export default function DocumentsPage() {
                                 </span>
                             </button>
                             <button
-                                className="rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition duration-150"
+                                className="bg-white hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-4 py-2 border border-slate-200 dark:border-gray-700 rounded-lg font-medium text-slate-700 dark:text-slate-300 text-sm transition duration-150"
                                 onClick={() => setCreationMode("file")}
                             >
                                 <span className="flex items-center gap-2">
@@ -530,7 +531,7 @@ export default function DocumentsPage() {
                                 </span>
                             </button>
                             <button
-                                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition duration-150"
+                                className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium text-white text-sm transition duration-150"
                                 onClick={() => setCreationMode("text")}
                             >
                                 <span className="flex items-center gap-2">
@@ -552,18 +553,18 @@ export default function DocumentsPage() {
                     )}
                 </header>
 
-                <section className="grid gap-6 lg:grid-cols-[260px_1fr]">
+                <section className="gap-6 grid lg:grid-cols-[260px_1fr]">
                     <aside className="space-y-4">
-                        <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 shadow-sm">
-                            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <div className="bg-white dark:bg-gray-900/60 shadow-sm p-4 border border-slate-200 dark:border-gray-800 rounded-xl">
+                            <h2 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">
                                 Navigation
                             </h2>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <p className="mt-1 text-slate-500 dark:text-slate-400 text-xs">
                                 Accédez rapidement à vos dossiers.
                             </p>
-                            <div className="mt-3 rounded-lg border border-dashed border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-900/30 p-3">
+                            <div className="bg-slate-50 dark:bg-gray-900/30 mt-3 p-3 border border-slate-200 dark:border-gray-700 border-dashed rounded-lg">
                                 {isLoading ? (
-                                    <p className="text-xs text-slate-400">
+                                    <p className="text-slate-400 text-xs">
                                         Chargement de la navigation...
                                     </p>
                                 ) : (
@@ -576,12 +577,12 @@ export default function DocumentsPage() {
                             </div>
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/60 p-4 shadow-sm space-y-2">
-                            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <div className="space-y-2 bg-white dark:bg-gray-900/60 shadow-sm p-4 border border-slate-200 dark:border-gray-800 rounded-xl">
+                            <h2 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">
                                 Profil
                             </h2>
                             {profile ? (
-                                <ul className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                                <ul className="space-y-1 text-slate-500 dark:text-slate-400 text-xs">
                                     <li>
                                         <span className="font-semibold text-slate-600 dark:text-slate-300">
                                             Nom :
@@ -604,11 +605,11 @@ export default function DocumentsPage() {
                                     </li>
                                 </ul>
                             ) : isLoading ? (
-                                <p className="text-xs text-slate-400">
+                                <p className="text-slate-400 text-xs">
                                     Chargement du profil...
                                 </p>
                             ) : (
-                                <p className="text-xs text-red-500">
+                                <p className="text-red-500 text-xs">
                                     Profil indisponible.
                                 </p>
                             )}
@@ -616,7 +617,7 @@ export default function DocumentsPage() {
                     </aside>
 
                     <section className="space-y-6">
-                        <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex flex-wrap justify-between items-center gap-3">
                             <Breadcrumbs
                                 path={breadcrumbs}
                                 onNavigate={handleNavigateBreadcrumb}
@@ -624,7 +625,7 @@ export default function DocumentsPage() {
                             <button
                                 onClick={fetchDocuments}
                                 disabled={refreshing}
-                                className="inline-flex items-center gap-2 rounded-md border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-slate-600 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-50 px-3 py-2 border border-slate-300 dark:border-gray-700 rounded-md text-slate-600 dark:text-slate-200 text-sm transition duration-150 disabled:cursor-not-allowed"
                             >
                                 {refreshing ? "Actualisation..." : "Actualiser"}
                             </button>
@@ -633,10 +634,10 @@ export default function DocumentsPage() {
                         {creationMode && (
                             <form
                                 onSubmit={handleCreate}
-                                className="rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 shadow-sm space-y-4"
+                                className="space-y-4 bg-white dark:bg-gray-900 shadow-sm p-5 border border-slate-200 dark:border-gray-700 rounded-xl"
                             >
-                                <div className="flex items-center justify-between">
-                                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                                <div className="flex justify-between items-center">
+                                    <h2 className="font-semibold text-slate-800 dark:text-slate-100 text-lg">
                                         {creationMode === "folder"
                                             ? "Nouveau dossier"
                                             : creationMode === "text"
@@ -646,18 +647,18 @@ export default function DocumentsPage() {
                                     <button
                                         type="button"
                                         onClick={resetCreationForm}
-                                        className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition duration-150"
+                                        className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 dark:text-slate-400 text-sm transition duration-150"
                                     >
                                         Annuler
                                     </button>
                                 </div>
 
-                                <div className="grid gap-4 md:grid-cols-2">
+                                <div className="gap-4 grid md:grid-cols-2">
                                     <div className="space-y-1">
-                                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300 block">
+                                        <label className="block font-medium text-slate-600 dark:text-slate-300 text-sm">
                                             Dossier parent
                                         </label>
-                                        <div className="text-sm text-slate-500 dark:text-slate-400 p-2 border border-slate-200 dark:border-gray-700 rounded-md bg-slate-50 dark:bg-gray-900/50">
+                                        <div className="bg-slate-50 dark:bg-gray-900/50 p-2 border border-slate-200 dark:border-gray-700 rounded-md text-slate-500 dark:text-slate-400 text-sm">
                                             {currentFolder
                                                 ? currentFolder.name
                                                 : "Racine"}
@@ -666,7 +667,7 @@ export default function DocumentsPage() {
 
                                     {(creationMode === "folder" ||
                                         creationMode === "text") && (
-                                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300 block space-y-1">
+                                        <label className="block space-y-1 font-medium text-slate-600 dark:text-slate-300 text-sm">
                                             Nom du document/dossier
                                             <input
                                                 type="text"
@@ -674,7 +675,7 @@ export default function DocumentsPage() {
                                                 onChange={(e) =>
                                                     setNewName(e.target.value)
                                                 }
-                                                className="w-full rounded-md border border-slate-300 dark:border-gray-600 dark:bg-gray-900 px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition duration-150"
+                                                className="dark:bg-gray-900 px-3 py-2 border border-slate-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full text-slate-900 dark:text-white text-sm transition duration-150"
                                                 placeholder={
                                                     creationMode === "folder"
                                                         ? "Nom du dossier"
@@ -686,7 +687,7 @@ export default function DocumentsPage() {
                                     )}
 
                                     {creationMode === "file" && (
-                                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300 col-span-2 block space-y-1">
+                                        <label className="block space-y-1 col-span-2 font-medium text-slate-600 dark:text-slate-300 text-sm">
                                             Sélectionner un fichier
                                             <input
                                                 type="file"
@@ -697,11 +698,11 @@ export default function DocumentsPage() {
                                                             : null
                                                     )
                                                 }
-                                                className="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-800 dark:file:text-indigo-200 dark:hover:file:bg-indigo-700 transition duration-150"
+                                                className="block hover:file:bg-indigo-200 dark:hover:file:bg-indigo-700 dark:file:bg-indigo-800 file:bg-indigo-100 file:mr-4 file:px-4 file:py-2 file:border-0 file:rounded-md w-full file:font-semibold text-slate-500 dark:file:text-indigo-200 dark:text-slate-400 file:text-indigo-700 text-sm file:text-sm transition duration-150"
                                                 required={!fileToUpload}
                                             />
                                             {fileToUpload && (
-                                                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                                <p className="mt-2 text-slate-500 dark:text-slate-400 text-xs">
                                                     Fichier prêt : **{fileToUpload.name}** (
                                                     {Math.round(
                                                         fileToUpload.size / 1024
@@ -714,7 +715,7 @@ export default function DocumentsPage() {
                                 </div>
 
                                 {creationMode === "text" && (
-                                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 space-y-1">
+                                    <label className="block space-y-1 font-medium text-slate-600 dark:text-slate-300 text-sm">
                                         Contenu initial (optionnel)
                                         <textarea
                                             value={newContent}
@@ -722,7 +723,7 @@ export default function DocumentsPage() {
                                                 setNewContent(e.target.value)
                                             }
                                             rows={6}
-                                            className="w-full rounded-md border border-slate-300 dark:border-gray-600 dark:bg-gray-900 px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition duration-150"
+                                            className="dark:bg-gray-900 px-3 py-2 border border-slate-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full text-slate-900 dark:text-white text-sm transition duration-150"
                                             placeholder="Ajoutez un contenu initial si nécessaire..."
                                         />
                                     </label>
@@ -732,14 +733,14 @@ export default function DocumentsPage() {
                                     <button
                                         type="button"
                                         onClick={resetCreationForm}
-                                        className="rounded-md border border-slate-300 dark:border-gray-600 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-800 transition duration-150"
+                                        className="hover:bg-slate-50 dark:hover:bg-gray-800 px-4 py-2 border border-slate-300 dark:border-gray-600 rounded-md text-slate-600 dark:text-slate-300 text-sm transition duration-150"
                                         disabled={creating}
                                     >
                                         Annuler
                                     </button>
                                     <button
                                         type="submit"
-                                        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition duration-150 disabled:cursor-not-allowed disabled:opacity-60"
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 px-4 py-2 rounded-md font-medium text-white text-sm transition duration-150 disabled:cursor-not-allowed"
                                         disabled={creating}
                                     >
                                         {creating
@@ -752,12 +753,12 @@ export default function DocumentsPage() {
                             </form>
                         )}
 
-                        <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-                            <div className="flex items-center justify-between flex-wrap gap-3">
-                                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                        <div className="bg-white dark:bg-gray-900 shadow-sm p-4 border border-slate-200 dark:border-gray-800 rounded-xl">
+                            <div className="flex flex-wrap justify-between items-center gap-3">
+                                <h2 className="font-semibold text-slate-800 dark:text-slate-100 text-lg">
                                     Contenu du dossier
                                 </h2>
-                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                <span className="text-slate-500 dark:text-slate-400 text-xs">
                                     {isLoading
                                         ? "Chargement..."
                                         : `${sortedChildren.length} élément(s)`}
@@ -765,31 +766,32 @@ export default function DocumentsPage() {
                             </div>
 
                             {isLoading ? (
-                                <div className="mt-6 space-y-3">
+                                <div className="space-y-3 mt-6">
                                     {[...Array(4)].map((_, index) => (
                                         <div
                                             key={index}
-                                            className="h-12 w-full animate-pulse rounded-lg bg-slate-100 dark:bg-gray-800"
+                                            className="bg-slate-100 dark:bg-gray-800 rounded-lg w-full h-12 animate-pulse"
                                         />
                                     ))}
                                 </div>
                             ) : !sortedChildren.length ? (
-                                <div className="mt-6 rounded-lg border border-dashed border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-900/40 p-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                                <div className="bg-slate-50 dark:bg-gray-900/40 mt-6 p-10 border border-slate-200 dark:border-gray-700 border-dashed rounded-lg text-slate-500 dark:text-slate-400 text-sm text-center">
                                     Ce dossier est vide. Créez un document ou importez un fichier pour commencer.
                                 </div>
                             ) : (
-                                <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 dark:border-gray-800">
-                                    <table className="min-w-full divide-y divide-slate-200 dark:divide-gray-700">
-                                        <thead className="bg-slate-100 dark:bg-gray-800 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                                <div className="mt-6 border border-slate-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                                    <table className="divide-y divide-slate-200 dark:divide-gray-700 min-w-full">
+                                        <thead className="bg-slate-100 dark:bg-gray-800 text-slate-500 dark:text-slate-300 text-xs text-left uppercase tracking-wide">
                                             <tr>
                                                 <th className="px-4 py-3">Nom</th>
-                                                <th className="px-4 py-3 hidden md:table-cell">Type</th>
+                                                <th className="hidden md:table-cell px-4 py-3">Type</th>
+                                                <th className="hidden lg:table-cell px-4 py-3">Créé le</th>
                                                 <th className="px-4 py-3 text-right">
                                                     Actions
                                                 </th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-slate-100 dark:divide-gray-700">
                                             {sortedChildren.map((doc) => {
                                                 const downloadHref = getDownloadUrl(doc);
                                                 return (
@@ -800,7 +802,7 @@ export default function DocumentsPage() {
                                                         <td className="px-4 py-3">
                                                             <button
                                                                 onClick={() => handleOpen(doc)}
-                                                                className="flex items-center gap-3 text-left text-slate-700 dark:text-slate-200"
+                                                                className="flex items-center gap-3 text-slate-700 dark:text-slate-200 text-left"
                                                             >
                                                                 <span className="text-xl">
                                                                     {TYPE_ICON[doc.type]}
@@ -810,15 +812,24 @@ export default function DocumentsPage() {
                                                                 </span>
                                                             </button>
                                                         </td>
-                                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 hidden md:table-cell">
+                                                        <td className="hidden md:table-cell px-4 py-3 text-slate-500 dark:text-slate-400">
                                                             {TYPE_LABEL[doc.type]}
+                                                        </td>
+                                                        <td className="hidden lg:table-cell px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">
+                                                            {new Date(doc.created_at).toLocaleString('fr-FR')}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <div className="flex justify-end gap-2 text-xs">
+                                                                <button
+                                                                    className="hover:bg-slate-100 dark:hover:bg-gray-700 px-2 py-1 border border-slate-300 dark:border-gray-600 rounded-md text-slate-600 dark:text-slate-300 transition duration-150"
+                                                                    onClick={() => setSelectedDocForDetails(doc)}
+                                                                >
+                                                                    Détails
+                                                                </button>
                                                                 {downloadHref && (
                                                                     <Link
                                                                         href={downloadHref}
-                                                                        className="rounded-md border border-blue-300 px-2 py-1 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900 transition duration-150"
+                                                                        className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-md text-blue-600 dark:text-blue-300 transition duration-150"
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                     >
@@ -826,13 +837,13 @@ export default function DocumentsPage() {
                                                                     </Link>
                                                                 )}
                                                                 <button
-                                                                    className="rounded-md border border-slate-300 px-2 py-1 text-slate-600 dark:border-gray-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition duration-150"
+                                                                    className="hover:bg-slate-100 dark:hover:bg-gray-700 px-2 py-1 border border-slate-300 dark:border-gray-600 rounded-md text-slate-600 dark:text-slate-300 transition duration-150"
                                                                     onClick={() => handleRename(doc)}
                                                                 >
                                                                     Renommer
                                                                 </button>
                                                                 <button
-                                                                    className="rounded-md border border-red-300 px-2 py-1 text-red-600 bg-red-50 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900 transition duration-150"
+                                                                    className="bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900 px-2 py-1 border border-red-300 dark:border-red-700 rounded-md text-red-600 dark:text-red-300 transition duration-150"
                                                                     onClick={() => handleDelete(doc)}
                                                                 >
                                                                     Supprimer
@@ -850,8 +861,92 @@ export default function DocumentsPage() {
                     </section>
                 </section>
             </div>
+
+            {/* Modale de Détails */}
+            {selectedDocForDetails && (
+                <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/50 dark:bg-black/70 p-4">
+                    <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                        <div className="top-0 sticky flex justify-between items-center bg-white dark:bg-gray-800 p-4 border-slate-200 dark:border-gray-700 border-b">
+                            <h2 className="font-semibold text-slate-800 dark:text-slate-100 text-lg">
+                                Détails du document
+                            </h2>
+                            <button
+                                onClick={() => setSelectedDocForDetails(null)}
+                                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 dark:text-slate-400 transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="space-y-4 p-4">
+                            <div>
+                                <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                    Nom
+                                </span>
+                                <p className="mt-1 text-slate-600 dark:text-slate-300 text-sm break-words">
+                                    {selectedDocForDetails.name}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                    Type
+                                </span>
+                                <p className="mt-1">
+                                    <span className="inline-block bg-indigo-100 dark:bg-indigo-900 px-2 py-1 rounded-full font-semibold text-indigo-800 dark:text-indigo-200 text-xs">
+                                        {TYPE_LABEL[selectedDocForDetails.type]}
+                                    </span>
+                                </p>
+                            </div>
+                            <div>
+                                <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                    ID
+                                </span>
+                                <p className="mt-1 font-mono text-slate-600 dark:text-slate-400 text-xs break-all">
+                                    {selectedDocForDetails.id}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                    Créé le
+                                </span>
+                                <p className="mt-1 text-slate-600 dark:text-slate-300 text-sm">
+                                    {new Date(selectedDocForDetails.created_at).toLocaleString('fr-FR')}
+                                </p>
+                            </div>
+                            {selectedDocForDetails.mime_type && (
+                                <div>
+                                    <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                        Type MIME
+                                    </span>
+                                    <p className="mt-1 font-mono text-slate-600 dark:text-slate-400 text-xs">
+                                        {selectedDocForDetails.mime_type}
+                                    </p>
+                                </div>
+                            )}
+                            {selectedDocForDetails.parent_id && (
+                                <div>
+                                    <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
+                                        Dossier parent
+                                    </span>
+                                    <p className="mt-1 font-mono text-slate-600 dark:text-slate-400 text-xs break-all">
+                                        {selectedDocForDetails.parent_id}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex justify-end bg-slate-50 dark:bg-gray-900/50 p-4 border-slate-200 dark:border-gray-700 border-t">
+                            <button
+                                onClick={() => setSelectedDocForDetails(null)}
+                                className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md font-medium text-white text-sm transition duration-150"
+                            >
+                                Fermer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
+
 }
 
 function Breadcrumbs({
@@ -862,9 +957,9 @@ function Breadcrumbs({
     onNavigate: (id: string | null) => void;
 }) {
     return (
-        <nav className="text-xs text-slate-500">
+        <nav className="text-slate-500 text-xs">
             <span
-                className="cursor-pointer font-medium text-indigo-600 hover:text-indigo-800"
+                className="font-medium text-indigo-600 hover:text-indigo-800 cursor-pointer"
                 onClick={() => onNavigate(null)}
             >
                 Racine
@@ -873,7 +968,7 @@ function Breadcrumbs({
                 <span key={item.id} className="ml-1">
                     <span className="mx-1">/</span>
                     <span
-                        className="cursor-pointer text-indigo-600 hover:text-indigo-800"
+                        className="text-indigo-600 hover:text-indigo-800 cursor-pointer"
                         onClick={() => onNavigate(item.id)}
                     >
                         {item.name}
@@ -898,7 +993,7 @@ function FolderTree({
     if (!nodes.length) {
         return (
             depth === 0 && (
-                <p className="text-xs text-slate-400">Aucun dossier pour l'instant.</p>
+                <p className="text-slate-400 text-xs">Aucun dossier pour l'instant.</p>
             )
         );
     }
