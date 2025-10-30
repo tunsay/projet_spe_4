@@ -195,7 +195,7 @@ export default function ProfilePage() {
         let response: Response | null = null;
         try {
             response = await fetch(ENDPOINTS.DISABLE, {
-                method: "DELETE",
+                method: "POST",
                 credentials: "include",
             });
 
