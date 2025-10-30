@@ -5,10 +5,9 @@ const { sequelize } = require("../config/db");
 const User = require("./User");
 const Document = require("./Document");
 const DocumentPermission = require("./DocumentPermission");
-// const DocumentPermission = require('./DocumentPermission'); // Commenter ou supprimer les imports manquants
-// const CollaborationSession = require('./CollaborationSession');
+const CollaborationSession = require('./CollaborationSession');
 // const SessionParticipant = require('./SessionParticipant');
-// const Message = require('./Message');
+const Message = require('./Message');
 
 const db = {};
 
@@ -16,6 +15,8 @@ db.sequelize = sequelize;
 db.User = User;
 db.Document = Document;
 db.DocumentPermission = DocumentPermission;
+db.CollaborationSession = CollaborationSession;
+db.Message = Message;
 // ...
 
 // Associations

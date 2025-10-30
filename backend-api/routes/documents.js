@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const db = require("../models");
 const DocumentPermission = db.DocumentPermission;
+const CollaborationSession = db.CollaborationSession;
 
 // Configuration multer pour l'upload
 const upload = multer({ 
@@ -269,6 +270,11 @@ router.post("/", async (req, res) => {
       document_id: document.id,
       user_id: req.userId,
       permission: "owner"
+    })
+
+    await CollaborationSession.create({
+      document_id: document.id,
+      host_id: req.userId,
     })
 
     res.status(201).json({

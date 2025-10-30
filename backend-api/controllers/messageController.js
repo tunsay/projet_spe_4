@@ -10,11 +10,11 @@ const CollaborationSession = db.CollaborationSession;
  * Récupère les messages d'une collaboration sur un document.
  */
 const getMessagesBySessionId = async (req, res) => {
-    const documentId = req.id;
-    const userId = req.UserId
+    const {id} = req.params;
+    const userId = req.userId
 
     try{
-        const document = await Document.findByPk(documentId);
+        const document = await Document.findByPk(id);
         if(!document){
             console.log("Document introuvable")
             res.status(400).json({ message : "Document inaccessible" })
@@ -22,63 +22,7 @@ const getMessagesBySessionId = async (req, res) => {
 
         const documentPermission = await DocumentPermission.findOne({
             where: {
-                document_id : documentId,
-                user_id : userId 
-            }
-        })
-        if(!documentPermission){
-            console.log("Aucun droit sur le document")
-            res.status(400).json({ message : "Document inaccessible"})
-        }
-    } catch (error) {
-        console.error("Erreur de récupération de la session de collaboration:", error);
-        res.status(500).json({ message : "Erreur serveur interne" })
-    }
-
-    try {
-        const messages = await Messages.findAll({
-            where: {
-                document_id: documentId
-            }
-        });
-
-        res.status(200).json({
-            messages: messages | [],
-            document_id : documentId,
-            document_last_modified_at : document.last_modified_at
-        });
-    } catch (error) {
-        console.error("Erreur de récupération du profil:", error);
-        res.status(500).json({ message: "Erreur serveur interne." });
-    }
-};
-
-/**
- * Envoie un message sur une collaboration d'un document
- */
-const setMessageBySessionsId = async (req, res) => {
-    const documentId = req.id;
-    const userId = req.userId;
-
-    const {content} = req.body;
-
-    //verification du message
-    if(!content){
-        console.error("Aucun contenu dans le message envoyé.")
-        return res.status(400).json({ message : "Veuillez écrire un message." })
-    }
-
-    //verification de l'existance et des droits du document
-    try{
-        const document = await Document.findByPk(documentId);
-        if(!document){
-            console.log("Document introuvable")
-            res.status(400).json({ message : "Document inaccessible" })
-        }
-
-        const documentPermission = await DocumentPermission.findOne({
-            where: {
-                document_id : documentId,
+                document_id : id,
                 user_id : userId 
             }
         })
@@ -94,12 +38,80 @@ const setMessageBySessionsId = async (req, res) => {
     try {
         const collaborationSession = await CollaborationSession.findOne({
             where : {
-                document_id : documentId
+                document_id : id
             }
         });
 
         if(!collaborationSession){
-            console.error("La sessions de collaboration n'a pas été trouvée. Le document_id est :", documentId)
+            console.error("La sessions de collaboration n'a pas été trouvée. Le document_id est :", id)
+            return res.status(500).json({ message : "Erreur serveur interne." })
+        }
+
+        const messages = await Messages.findAll({
+            where: {
+                session_id: collaborationSession.id
+            }
+        });
+
+        console.log(messages, collaborationSession.id)
+
+        res.status(200).json({
+            messages: messages,
+            document_id : id,
+        });
+    } catch (error) {
+        console.error("Erreur de récupération du profil:", error);
+        res.status(500).json({ message: "Erreur serveur interne." });
+    }
+};
+
+/**
+ * Envoie un message sur une collaboration d'un document
+ */
+const setMessageBySessionsId = async (req, res) => {
+    const {id} = req.params;
+    const userId = req.userId;
+
+    const {content} = req.body;
+
+    //verification du message
+    if(!content){
+        console.error("Aucun contenu dans le message envoyé.")
+        return res.status(400).json({ message : "Veuillez écrire un message." })
+    }
+
+    //verification de l'existance et des droits du document
+    try{
+        const document = await Document.findByPk(id);
+        if(!document){
+            console.log("Document introuvable")
+            res.status(400).json({ message : "Document inaccessible" })
+        }
+
+        const documentPermission = await DocumentPermission.findOne({
+            where: {
+                document_id : id,
+                user_id : userId 
+            }
+        })
+        if(!documentPermission){
+            console.log("Aucun droit sur le document")
+            res.status(400).json({ message : "Document inaccessible"})
+        }
+    } catch (error) {
+        console.error("Erreur de récupération de la session de collaboration:", error);
+        res.status(500).json({ message : "Erreur serveur interne" })
+    }
+
+    try {
+        const collaborationSession = await CollaborationSession.findOne({
+            where : {
+                document_id : id
+            }
+        });
+
+        if(!collaborationSession){
+            console.error("La sessions de collaboration n'a pas été trouvée. Le document_id est :", id)
             return res.status(500).json({ message : "Erreur serveur interne." })
         }
 
@@ -113,7 +125,7 @@ const setMessageBySessionsId = async (req, res) => {
             // Le secret est renvoyé car il est nécessaire pour la vérification, mais il est maintenant stocké.
             message: message,
             user_id: userId,
-            document_id: documentId
+            document_id: id
         });
     } catch (error) {
         console.error("Erreur lors de l'envoie du message", error);
@@ -125,7 +137,7 @@ const setMessageBySessionsId = async (req, res) => {
  * Modifier un message
  */
 const editMessageById = async (req, res) => {
-    const messageId = req.id;
+    const {id} = req.params;
     const userId = req.userId;
 
     const {content} = req.body;
@@ -138,7 +150,7 @@ const editMessageById = async (req, res) => {
 
     //verification de l'existance et des droits du document
     try{
-        const message = await Messages.findByPk(messageId);
+        const message = await Messages.findByPk(id);
 
         if(!message){
             console.log("Message introuvable")
@@ -192,12 +204,12 @@ const editMessageById = async (req, res) => {
  * Supprimer un message
  */
 const deleteMessageById = async (req, res) => {
-    const messageId = req.id;
+    const {id} = req.params;
     const userId = req.userId;
 
     //verification de l'existance et des droits du document
     try{
-        const message = await Messages.findByPk(messageId);
+        const message = await Messages.findByPk(id);
 
         if(!message){
             console.log("Message introuvable")

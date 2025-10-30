@@ -8,7 +8,7 @@ const Message = sequelize.define(
     {
         id: {
             type: DataTypes.BIGINT,
-            defaultValue: DataTypes.BIGINT,
+            autoIncrement: true,
             primaryKey: true,
         },
         // Ajoutez ici les autres colonnes au fur et à mesure
@@ -37,9 +37,9 @@ const Message = sequelize.define(
         // ...
     },
     {
-        tableName: "documents",
+        tableName: "messages",
         timestamps: false,
     }
 );
 
-module.exports = Document;
+module.exports = Message;

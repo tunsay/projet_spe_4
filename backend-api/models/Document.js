@@ -16,7 +16,7 @@ const Document = sequelize.define(
             type: DataTypes.STRING(255),
             allowNull: false,
         },
-        role: {
+        type: {
             type: DataTypes.ENUM("text", "img", "pdf"),
             allowNull: false,
             defaultValue: "text",

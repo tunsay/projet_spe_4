@@ -32,9 +32,9 @@ const CollaborationSession = sequelize.define(
         // ...
     },
     {
-        tableName: "documents",
+        tableName: "collaboration_sessions",
         timestamps: false,
     }
 );
 
-module.exports = Document;
+module.exports = CollaborationSession;
