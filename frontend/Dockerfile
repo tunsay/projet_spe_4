@@ -13,6 +13,7 @@ ENV NODE_ENV=production
 
 COPY package*.json ./
 
+RUN npm install --silent --omit=dev
 RUN npm ci --silent --omit=dev
 
 COPY --from=builder /app/.next ./.next
