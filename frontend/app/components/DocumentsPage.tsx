@@ -9,6 +9,7 @@ import {
     type FormEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import { buildApiUrl } from "@/lib/api";
 
 type DocumentType = "folder" | "text" | "file";
 
@@ -34,8 +35,6 @@ interface Message {
     type: "success" | "error";
     text: string;
 }
-
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
 const TYPE_LABEL: Record<DocumentType, string> = {
     folder: "Dossier",
@@ -125,27 +124,22 @@ export default function DocumentsPage() {
         setTimeout(() => setMessage(null), 5000);
     };
 
-    const buildEndpoint = useCallback(
-        (path: string) => (API_BASE ? `${API_BASE}${path}` : path),
-        []
-    );
-
     const getDownloadUrl = useCallback(
         (doc: DocumentNode) => {
             if (doc.type === "file") {
-                return buildEndpoint(`/api/documents/file/${doc.id}/download`);
+                return buildApiUrl(`/api/documents/file/${doc.id}/download`);
             }
             if (doc.type === "text") {
-                return buildEndpoint(`/api/documents/${doc.id}/download`);
+                return buildApiUrl(`/api/documents/${doc.id}/download`);
             }
             return null;
         },
-        [buildEndpoint]
+        []
     );
 
     const fetchProfile = useCallback(async () => {
         try {
-            const response = await fetch(buildEndpoint("/api/profile"), {
+            const response = await fetch(buildApiUrl("/api/profile"), {
                 credentials: "include",
             });
 
@@ -185,12 +179,12 @@ export default function DocumentsPage() {
             );
             return null;
         }
-    }, [router, buildEndpoint]);
+    }, [router]);
 
     const fetchDocuments = useCallback(async () => {
         setRefreshing(true);
         try {
-            const response = await fetch(buildEndpoint("/api/documents"), {
+            const response = await fetch(buildApiUrl("/api/documents"), {
                 credentials: "include",
             });
 
@@ -231,7 +225,7 @@ export default function DocumentsPage() {
             setIsLoading(false);
             setRefreshing(false);
         }
-    }, [router, buildEndpoint]);
+    }, [router]);
 
     useEffect(() => {
         const bootstrap = async () => {
@@ -271,7 +265,7 @@ export default function DocumentsPage() {
         setMessage(null);
         try {
             const response = await fetch(
-                buildEndpoint("/api/documents"),
+                buildApiUrl("/api/documents"),
                 {
                     method: "POST",
                     credentials: "include",
@@ -339,7 +333,7 @@ export default function DocumentsPage() {
             formData.append("parent_id", currentFolderId || "");
 
             const response = await fetch(
-                buildEndpoint("/api/documents/file"),
+                buildApiUrl("/api/documents/file"),
                 {
                     method: "POST",
                     credentials: "include",
@@ -416,7 +410,7 @@ export default function DocumentsPage() {
 
         try {
             const response = await fetch(
-                buildEndpoint(`/api/documents/${doc.id}/metadata`),
+                buildApiUrl(`/api/documents/${doc.id}/metadata`),
                 {
                     method: "PUT",
                     credentials: "include",
@@ -466,7 +460,7 @@ export default function DocumentsPage() {
 
         try {
             const response = await fetch(
-                buildEndpoint(`/api/documents/${doc.id}`),
+                buildApiUrl(`/api/documents/${doc.id}`),
                 {
                     method: "DELETE",
                     credentials: "include",

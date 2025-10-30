@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { buildApiUrl } from "@/lib/api";
 
-const LOGIN_ENDPOINT = "/api/auth/login";
+const LOGIN_ENDPOINT = buildApiUrl("/api/auth/login");
 
 // Log les erreurs brutes en catch pour le débogage (remplace l'ancien console.log(e))
 const extractErrorMessage = async (
@@ -56,6 +57,7 @@ export default function LoginPage() {
                 headers: {
                     "Content-Type": "application/json",
                 },
+                credentials: "include",
                 body: JSON.stringify({ email, password }),
             });
 

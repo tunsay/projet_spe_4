@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildApiUrl } from "@/lib/api";
 
 interface DocumentDetail {
     id: string;
@@ -30,8 +31,6 @@ interface Message {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-
 export default function DocumentDetailPage() {
     const router = useRouter();
     const routeParams = useParams();
@@ -55,21 +54,16 @@ export default function DocumentDetailPage() {
 
     const isTextDocument = doc?.type === "text";
 
-    const buildEndpoint = useCallback(
-        (path: string) => (API_BASE ? `${API_BASE}${path}` : path),
-        []
-    );
-
     const downloadUrl = useMemo(() => {
         if (!doc) return null;
         if (doc.type === "file") {
-            return buildEndpoint(`/api/documents/file/${doc.id}/download`);
+            return buildApiUrl(`/api/documents/file/${doc.id}/download`);
         }
         if (doc.type === "text") {
-            return buildEndpoint(`/api/documents/${doc.id}/download`);
+            return buildApiUrl(`/api/documents/${doc.id}/download`);
         }
         return null;
-    }, [doc, buildEndpoint]);
+    }, [doc]);
 
     const inlinePreviewUrl = useMemo(() => {
         if (!downloadUrl) return null;
@@ -96,7 +90,7 @@ export default function DocumentDetailPage() {
 
     const fetchProfile = useCallback(async () => {
         try {
-            const response = await fetch(buildEndpoint("/api/profile"), {
+            const response = await fetch(buildApiUrl("/api/profile"), {
                 credentials: "include",
             });
 
@@ -120,7 +114,7 @@ export default function DocumentDetailPage() {
             });
             return null;
         }
-    }, [router, buildEndpoint]);
+    }, [router]);
 
     const fetchDocument = useCallback(async () => {
         if (!documentId) {
@@ -131,7 +125,7 @@ export default function DocumentDetailPage() {
         setMessage(null);
         try {
             const response = await fetch(
-                buildEndpoint(`/api/documents/${documentId}`),
+                buildApiUrl(`/api/documents/${documentId}`),
                 {
                     credentials: "include",
                 }
@@ -184,7 +178,7 @@ export default function DocumentDetailPage() {
         } finally {
             setLoading(false);
         }
-    }, [documentId, router, buildEndpoint]);
+    }, [documentId, router]);
 
     useEffect(() => {
         if (!documentId) {
@@ -250,7 +244,7 @@ export default function DocumentDetailPage() {
             setSaveState("saving");
             try {
                 const response = await fetch(
-                    buildEndpoint(`/api/documents/${doc.id}`),
+                    buildApiUrl(`/api/documents/${doc.id}`),
                     {
                         method: "PUT",
                         credentials: "include",
@@ -288,7 +282,7 @@ export default function DocumentDetailPage() {
                 });
             }
         },
-        [doc, content, persistedContent, withUserHeaders, buildEndpoint]
+        [doc, content, persistedContent, withUserHeaders]
     );
 
     const saveIndicator = useMemo(() => {

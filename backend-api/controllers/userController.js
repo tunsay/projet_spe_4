@@ -141,6 +141,7 @@ const activateTwoFactor = async (req, res) => {
 const disableTwoFactor = async (req, res) => {
     const userId = req.userId;
 
+    console.log("Désactivation 2FA pour l'utilisateur ID:", userId);
     try {
         const user = await User.findByPk(userId);
 
@@ -184,15 +185,24 @@ const updateUserProfile = async (req, res) => {
 
         // Valider les champs
         if (!name && !password) {
-            return res.status(400).json({ message: "Nom ou mot de passe requis." });
+            return res
+                .status(400)
+                .json({ message: "Nom ou mot de passe requis." });
         }
 
         if (name && name.trim().length === 0) {
-            return res.status(400).json({ message: "Le nom ne peut pas être vide." });
+            return res
+                .status(400)
+                .json({ message: "Le nom ne peut pas être vide." });
         }
 
         if (password && password.length < 8) {
-            return res.status(400).json({ message: "Le mot de passe doit contenir au minimum 8 caractères." });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Le mot de passe doit contenir au minimum 8 caractères.",
+                });
         }
 
         // Mettre à jour le nom
@@ -213,7 +223,7 @@ const updateUserProfile = async (req, res) => {
             id: user.id,
             name: user.display_name,
             email: user.email,
-            message: "Profil mis à jour avec succès."
+            message: "Profil mis à jour avec succès.",
         });
     } catch (error) {
         console.error("Erreur lors de la mise à jour du profil:", error);
@@ -226,5 +236,5 @@ module.exports = {
     setupTwoFactor,
     activateTwoFactor,
     disableTwoFactor,
-    updateUserProfile
+    updateUserProfile,
 };

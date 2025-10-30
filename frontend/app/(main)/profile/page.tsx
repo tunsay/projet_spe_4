@@ -2,13 +2,14 @@
 import React, { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { buildApiUrl } from "@/lib/api";
 
 // --- Endpoints ---
 const ENDPOINTS = {
-    SETUP: "/api/profile/2fa-setup",
-    ACTIVATE: "/api/profile/2fa-activate",
-    DISABLE: "/api/profile/2fa-disable",
-    PROFILE: "/api/profile/",
+    SETUP: buildApiUrl("/api/profile/2fa-setup"),
+    ACTIVATE: buildApiUrl("/api/profile/2fa-activate"),
+    DISABLE: buildApiUrl("/api/profile/2fa-disable"),
+    PROFILE: buildApiUrl("/api/profile/"),
 };
 
 // --- Types spécifiques à la 2FA ---
@@ -75,7 +76,9 @@ export default function ProfilePage() {
             setAuthError(null);
 
             try {
-                const response = await fetch(ENDPOINTS.PROFILE);
+                const response = await fetch(ENDPOINTS.PROFILE, {
+                    credentials: "include",
+                });
 
                 if (response.status === 401) {
                     router.replace("/login");
@@ -113,7 +116,10 @@ export default function ProfilePage() {
         setPageError("");
         let response: Response | null = null;
         try {
-            response = await fetch(ENDPOINTS.SETUP, { method: "POST" });
+            response = await fetch(ENDPOINTS.SETUP, {
+                method: "POST",
+                credentials: "include",
+            });
 
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response, null);
@@ -149,6 +155,7 @@ export default function ProfilePage() {
                 response = await fetch(ENDPOINTS.ACTIVATE, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({ token: activationToken }),
                 });
 
@@ -187,7 +194,10 @@ export default function ProfilePage() {
         setPageError("");
         let response: Response | null = null;
         try {
-            response = await fetch(ENDPOINTS.DISABLE, { method: "DELETE" });
+            response = await fetch(ENDPOINTS.DISABLE, {
+                method: "DELETE",
+                credentials: "include",
+            });
 
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response, null);

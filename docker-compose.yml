@@ -57,6 +57,8 @@ services:
             dockerfile: Dockerfile
         container_name: app_frontend
         restart: always
+        env_file:
+            - ./frontend/.env.production
         environment:
             - NODE_ENV=production
         ports:

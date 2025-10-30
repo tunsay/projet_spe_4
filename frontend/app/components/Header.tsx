@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { buildApiUrl } from "@/lib/api";
 
 // --- Types et Endpoints ---
 // ⚠️ Mise à jour de l'interface pour inclure le rôle
@@ -11,10 +12,8 @@ interface Profile {
     role: "admin" | "user"; // Ajout du rôle
 }
 
-const ENDPOINTS = {
-    PROFILE_ME: "/api/profile",
-    LOGOUT: "/auth/logout",
-};
+const PROFILE_ENDPOINT = buildApiUrl("/api/profile");
+const LOGOUT_ENDPOINT = buildApiUrl("/api/auth/logout");
 
 // --- Composant Principal Header ---
 export default function Header() {
@@ -28,7 +27,10 @@ export default function Header() {
         setError(null);
         try {
             // Note: Le point de terminaison de déconnexion est toujours '/auth/logout'
-            await fetch(ENDPOINTS.LOGOUT, { method: "POST" });
+            await fetch(LOGOUT_ENDPOINT, {
+                method: "POST",
+                credentials: "include",
+            });
 
             setProfile(null);
             router.push("/login");
@@ -45,7 +47,9 @@ export default function Header() {
 
             try {
                 // Note: Le point de terminaison de profil est /api/profile
-                const response = await fetch(ENDPOINTS.PROFILE_ME);
+                const response = await fetch(PROFILE_ENDPOINT, {
+                    credentials: "include",
+                });
 
                 if (response.status === 401 || response.status === 403) {
                     setProfile(null);

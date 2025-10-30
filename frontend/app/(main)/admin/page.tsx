@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
+import { buildApiUrl } from "@/lib/api";
 
 // --- Types et Endpoints ---
 interface User {
@@ -18,9 +19,9 @@ interface NewUserData {
 }
 
 const ADMIN_ENDPOINTS = {
-    USERS: "/api/admin/users",
-    BLOCK: "/api/admin/users/block",
-    UNBLOCK: "/api/admin/users/unblock",
+    USERS: buildApiUrl("/api/admin/users"),
+    BLOCK: buildApiUrl("/api/admin/users/block"),
+    UNBLOCK: buildApiUrl("/api/admin/users/unblock"),
 };
 
 export default function AdminUsersPage() {
@@ -53,7 +54,9 @@ export default function AdminUsersPage() {
         setLoading(true);
         setNotificationMessage(null);
         try {
-            const response = await fetch(ADMIN_ENDPOINTS.USERS);
+            const response = await fetch(ADMIN_ENDPOINTS.USERS, {
+                credentials: "include",
+            });
 
             if (response.status === 401 || response.status === 403) {
                 handleNotification(
@@ -108,6 +111,7 @@ export default function AdminUsersPage() {
             try {
                 const response = await fetch(`${endpoint}/${userId}`, {
                     method: "POST",
+                    credentials: "include",
                 });
 
                 if (!response.ok) {
@@ -164,6 +168,7 @@ export default function AdminUsersPage() {
             const response = await fetch(ADMIN_ENDPOINTS.USERS, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify(newUserData),
             });
 

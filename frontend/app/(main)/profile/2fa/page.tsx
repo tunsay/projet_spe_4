@@ -2,12 +2,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { buildApiUrl } from "@/lib/api";
 
 // --- Endpoints ---
 const ENDPOINTS = {
-    SETUP: "/api/profile/2fa-setup",
-    ACTIVATE: "/api/profile/2fa-activate",
-    VERIFY: "/api/auth/2fa-verify",
+    SETUP: buildApiUrl("/api/profile/2fa-setup"),
+    ACTIVATE: buildApiUrl("/api/profile/2fa-activate"),
+    VERIFY: buildApiUrl("/api/auth/2fa-verify"),
 };
 
 // --- Types utilitaires ---
@@ -77,6 +78,7 @@ export default function TwoFAPage() {
             const response = await fetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: body ? JSON.stringify(body) : undefined,
             });
 
