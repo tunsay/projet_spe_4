@@ -31,19 +31,43 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("user connected", socket.id, "user:", socket.user?.id);
 
-  // Demande de rejoindre un document
-  socket.on("join-document", async ({ docId }) => {
+  // Helper to respond either via ack callback or via the legacy 'message' event
+  const respond = (payload, cb) => {
     try {
-      if (!docId) return socket.emit({ ok: false, reason: "missing_docId" });
+      if (typeof cb === "function") return cb(payload);
+    } catch (err) {
+      // ignore ack errors
+    }
+    // Fallback for older clients expecting an unnamed message
+    try {
+      socket.emit("message", payload);
+    } catch (e) {
+      console.error("Failed to send fallback message response:", e);
+    }
+  };
+
+  // Demande de rejoindre un document
+  socket.on("join-document", async ({ docId }, cb) => {
+    try {
+      if (!docId) {
+        console.log("user", socket.id, "user:", socket.user?.id, "joining doc: missing docId");
+        return respond({ ok: false, reason: "missing_docId" }, cb);
+      }
   
       // Vérifier droit d'accès (implémenter canAccessDocument)
       const permission = await canAccessDocument(socket.user, docId);
-      if (!permission) return socket.emit({ ok: false, reason: "forbidden" });
+      if (!permission) {
+        console.log("user", socket.id, "user:", socket.user?.id, "joining doc:", docId, " - forbidden");
+        return respond({ ok: false, reason: "forbidden" }, cb);
+      }
 
   
       // Récupérer état initial (optionnel) : load from DB/cache
       const initialState = await loadDocumentSnapshot(socket.user, docId);
-      if (!initialState) return socket.emit({ ok: false, reason: "forbidden" });
+      if (!initialState) {
+        console.log("user", socket.id, "user:", socket.user?.id, "joining doc:", docId, " - forbidden");
+        return socket.emit({ ok: false, reason: "forbidden" });
+      }
       if (initialState.type === "text") {
         const room = `document:${docId}`;
         // join crée la room si elle n'existe pas
@@ -53,7 +77,7 @@ io.on("connection", (socket) => {
         const membersCount = clients ? clients.size : 0;
     
         // Notifier le client qu'il a rejoint
-        socket.emit({ ok: true, docId, membersCount, initialState });
+        respond({ ok: true, docId, membersCount, initialState }, cb);
     
         // Notifier les autres membres
         socket.to(room).emit("presence", {
@@ -62,21 +86,22 @@ io.on("connection", (socket) => {
           socketId: socket.id,
           membersCount,
         });
+        console.log("user", socket.id, "user:", socket.user?.id, "joining doc:", docId, " - success");
       } else {
-        return socket.emit({ ok: false, reason: "unsupported_document_type" });
+        return respond({ ok: false, reason: "unsupported_document_type" }, cb);
       }
     } catch (error) {
       console.error("Error in join-document:", error);
-      return socket.emit({ ok: false, reason: "internal_error" });
+      return respond({ ok: false, reason: "internal_error" }, cb);
     }
   });
 
   // Exemple d'édition (diff/delta)
-  socket.on("doc-change", async ({ docId, delta }) => {
+  socket.on("doc-change", async ({ docId, delta }, cb) => {
     try {
       const room = `document:${docId}`;
       // Validation & autorisation rapide
-      if (!socket.rooms.has(room)) return socket.emit({ ok: false, reason: "not_in_room" });
+      if (!socket.rooms.has(room)) return respond({ ok: false, reason: "not_in_room" }, cb);
   
       // Appliquer/persister le delta (optimiste ou via CRDT)
       //await persistDelta(docId, delta, socket.user.id);
@@ -84,10 +109,10 @@ io.on("connection", (socket) => {
       // Broadcast à la room (sauf l'émetteur)
       socket.to(room).emit("doc-change", { docId, delta, author: socket.user.id });
   
-      socket.emit({ ok: true });
+      respond({ ok: true }, cb);
     } catch (error) {
       console.error("Error in join-document:", error);
-      return socket.emit({ ok: false, reason: "internal_error" });
+      return respond({ ok: false, reason: "internal_error" }, cb);
     }
   });
 
@@ -102,7 +127,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", (reason) => {
-    console.log("disconnect", socket.id, reason);
+    console.log("disconnect", socket.id, "reason:", reason);
     // Optionnel : notifier rooms de la départ (presence leave)
     for (const room of socket.rooms) {
       if (room.startsWith("document:")) {
