@@ -1,11 +1,9 @@
 "use client";
+
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildApiUrl } from "@/lib/api";
-import * as Y from 'yjs'
-import useSocket from "@/hooks/useSocket";
-import useRoomDocument from "@/hooks/useRoomDocument";
 
 interface DocumentDetail {
     id: string;
@@ -46,19 +44,14 @@ export default function DocumentDetailPage() {
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [doc, setDoc] = useState<DocumentDetail | null>(null);
+    const [content, setContent] = useState<string>("");
     const [persistedContent, setPersistedContent] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<Message | null>(null);
     const [saveState, setSaveState] = useState<SaveState>("idle");
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const saveTimeout = useRef<NodeJS.Timeout | null>(null);
-    //const { socket } = useSocket(documentId);
-    const {
-        socket,
-        joined
-    } = useRoomDocument(documentId);
-    const ydoc = new Y.Doc();
-    //console.log("socket", socket);
+
     const isTextDocument = doc?.type === "text";
 
     const downloadUrl = useMemo(() => {
@@ -164,7 +157,7 @@ export default function DocumentDetailPage() {
             setDoc(data);
 
             const initial = data.content ?? "";
-            ydoc.getArray('myarray').insert(0, [initial])
+            setContent(initial);
             setPersistedContent(initial);
             setLastSavedAt(
                 data.last_modified_at ? new Date(data.last_modified_at) : null
@@ -209,25 +202,25 @@ export default function DocumentDetailPage() {
 
     useEffect(() => {
         if (!isTextDocument) return;
- //       if (content === persistedContent) return;
+        if (content === persistedContent) return;
 
         setSaveState("idle");
 
         if (saveTimeout.current) {
             clearTimeout(saveTimeout.current);
         }
-/*
+
         saveTimeout.current = setTimeout(() => {
             handleSave(content);
         }, 1500);
-*/
+
         return () => {
             if (saveTimeout.current) {
                 clearTimeout(saveTimeout.current);
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [/*content, */persistedContent, isTextDocument]);
+    }, [content, persistedContent, isTextDocument]);
 
     const withUserHeaders = useCallback(
         (extra: HeadersInit = {}) => {
@@ -289,7 +282,7 @@ export default function DocumentDetailPage() {
                 });
             }
         },
-        [doc/*, content*/, persistedContent, withUserHeaders]
+        [doc, content, persistedContent, withUserHeaders]
     );
 
     const saveIndicator = useMemo(() => {
@@ -301,11 +294,11 @@ export default function DocumentDetailPage() {
             case "error":
                 return "Erreur de sauvegarde";
             default:
-                return (/*content === persistedContent
+                return content === persistedContent
                     ? "À jour"
-                    : */"Modifications en attente");
+                    : "Modifications en attente";
         }
-    }, [saveState/*, content*/, persistedContent]);
+    }, [saveState, content, persistedContent]);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10">
@@ -356,8 +349,8 @@ export default function DocumentDetailPage() {
                                     onClick={() => handleSave()}
                                     className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-md hover:bg-indigo-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled={
-                                        saveState === "saving"// ||
-                                        //content === persistedContent
+                                        saveState === "saving" ||
+                                        content === persistedContent
                                     }
                                 >
                                     Sauvegarder maintenant
@@ -447,8 +440,8 @@ export default function DocumentDetailPage() {
                             <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
                                 Contenu du document
                                 <textarea
-                                    value={ydoc.getText().toString()}
-                                    //onChange={(e) => setContent(e.target.value)}
+                                    value={content}
+                                    onChange={(e) => setContent(e.target.value)}
                                     rows={18}
                                     className="mt-2 w-full rounded-lg border border-slate-300 dark:border-gray-600 dark:bg-gray-900 px-3 py-2 text-sm leading-relaxed shadow-inner text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition duration-150"
                                     placeholder="Commencez à saisir votre contenu…"
