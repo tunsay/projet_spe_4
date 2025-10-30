@@ -1,0 +1,9 @@
+.next
+.git
+node_modules
+npm-debug.log*
+yarn-debug.log*
+.DS_Store
+.env.local
+.env.development
+**/*.tsbuildinfo

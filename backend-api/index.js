@@ -41,7 +41,12 @@ app.use(
     cors({
         origin: CORS_ORIGINS,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-User-ID-Test"],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+            "X-User-ID-Test",
+            "user-id",
+        ],
         // Utilisez 'true' si vous gérez l'authentification par cookies
         credentials: true,
     })
