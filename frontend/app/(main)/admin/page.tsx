@@ -20,8 +20,6 @@ interface NewUserData {
 
 const ADMIN_ENDPOINTS = {
     USERS: buildApiUrl("/api/admin/users"),
-    BLOCK: buildApiUrl("/api/admin/users/block"),
-    UNBLOCK: buildApiUrl("/api/admin/users/unblock"),
 };
 
 export default function AdminUsersPage() {
@@ -97,9 +95,7 @@ export default function AdminUsersPage() {
 
     const handleBlockToggle = useCallback(
         async (userId: number | string, isBlocked: boolean) => {
-            const endpoint = isBlocked
-                ? ADMIN_ENDPOINTS.UNBLOCK
-                : ADMIN_ENDPOINTS.BLOCK;
+            const endpoint = isBlocked ? "unblock" : "block";
             const action = isBlocked ? "Déblocage" : "Blocage";
 
             setUsers((prevUsers) =>
@@ -109,10 +105,13 @@ export default function AdminUsersPage() {
             );
 
             try {
-                const response = await fetch(`${endpoint}/${userId}`, {
-                    method: "POST",
-                    credentials: "include",
-                });
+                const response = await fetch(
+                    `${ADMIN_ENDPOINTS.USERS}/${userId}/${endpoint}`,
+                    {
+                        method: "PUT",
+                        credentials: "include",
+                    }
+                );
 
                 if (!response.ok) {
                     setUsers((prevUsers) =>
@@ -136,7 +135,7 @@ export default function AdminUsersPage() {
                         false
                     );
                 }
-            } catch (err) {
+            } catch {
                 setUsers((prevUsers) =>
                     prevUsers.map((u) =>
                         u.id === userId ? { ...u, is_blocked: isBlocked } : u
@@ -203,8 +202,8 @@ export default function AdminUsersPage() {
     };
 
     return (
-        <main className="mx-auto max-w-6xl px-4 py-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+        <main className="bg-gray-50 dark:bg-gray-900 mx-auto px-4 py-8 max-w-6xl min-h-screen">
+            <h1 className="mb-6 font-bold text-gray-900 dark:text-gray-100 text-3xl">
                 Administration des Utilisateurs
             </h1>
 
@@ -223,13 +222,13 @@ export default function AdminUsersPage() {
 
             <form
                 onSubmit={handleFormSubmit}
-                className="p-6 mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+                className="bg-white dark:bg-gray-800 shadow-xl mb-8 p-6 border border-gray-200 dark:border-gray-700 rounded-lg"
             >
-                <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100 text-xl">
                     Inscrire un nouvel utilisateur
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="gap-4 grid grid-cols-1 md:grid-cols-4">
                     <input
                         type="email"
                         name="email"
@@ -237,7 +236,7 @@ export default function AdminUsersPage() {
                         placeholder="Email"
                         value={newUserData.email}
                         onChange={handleFormChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="block dark:bg-gray-700 shadow-sm mt-1 p-2 border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:ring-indigo-500 w-full dark:text-white"
                     />
 
                     <input
@@ -247,7 +246,7 @@ export default function AdminUsersPage() {
                         placeholder="Nom d'affichage"
                         value={newUserData.display_name}
                         onChange={handleFormChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="block dark:bg-gray-700 shadow-sm mt-1 p-2 border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:ring-indigo-500 w-full dark:text-white"
                     />
 
                     <input
@@ -257,25 +256,25 @@ export default function AdminUsersPage() {
                         placeholder="Mot de passe"
                         value={newUserData.password}
                         onChange={handleFormChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="block dark:bg-gray-700 shadow-sm mt-1 p-2 border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:ring-indigo-500 w-full dark:text-white"
                     />
 
                     <select
                         name="role"
                         value={newUserData.role}
                         onChange={handleFormChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="block dark:bg-gray-700 shadow-sm mt-1 p-2 border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-md focus:ring-indigo-500 w-full dark:text-white"
                     >
                         <option value="user">Utilisateur standard</option>
                         <option value="admin">Administrateur</option>
                     </select>
                 </div>
 
-                <div className="mt-6 flex justify-end items-center">
+                <div className="flex justify-end items-center mt-6">
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="px-6 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition duration-150"
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-sm px-6 py-2 border border-transparent rounded-md font-medium text-white text-sm transition duration-150"
                     >
                         {isSubmitting
                             ? "Inscription en cours..."
@@ -284,24 +283,24 @@ export default function AdminUsersPage() {
                 </div>
             </form>
 
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100 mt-12">
+            <h2 className="mt-12 mb-4 font-bold text-gray-900 dark:text-gray-100 text-2xl">
                 Liste des Utilisateurs
             </h2>
 
             {loading ? (
-                <div className="flex items-center justify-center h-20">
-                    <div className="px-3 py-1 text-sm font-medium leading-none text-center text-indigo-800 bg-indigo-200 rounded-full animate-pulse dark:bg-indigo-900 dark:text-indigo-200">
+                <div className="flex justify-center items-center h-20">
+                    <div className="bg-indigo-200 dark:bg-indigo-900 px-3 py-1 rounded-full font-medium text-indigo-800 dark:text-indigo-200 text-sm text-center leading-none animate-pulse">
                         Chargement des utilisateurs...
                     </div>
                 </div>
             ) : users.length === 0 ? (
-                <div className="p-4 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+                <div className="bg-white dark:bg-gray-800 p-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300">
                     Aucun utilisateur trouvé.
                 </div>
             ) : (
-                <div className="relative overflow-x-auto shadow-xl sm:rounded-lg">
-                    <table className="w-full text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-200 dark:bg-gray-700 dark:text-gray-400 border-b dark:border-gray-600">
+                <div className="relative shadow-xl sm:rounded-lg overflow-x-auto">
+                    <table className="w-full text-gray-500 dark:text-gray-400 text-sm text-left rtl:text-right">
+                        <thead className="bg-gray-200 dark:bg-gray-700 dark:border-gray-600 border-b text-gray-700 dark:text-gray-400 text-xs uppercase">
                             <tr>
                                 <th scope="col" className="px-6 py-3">
                                     Nom d&apos;utilisateur
@@ -324,11 +323,11 @@ export default function AdminUsersPage() {
                             {users.map((user) => (
                                 <tr
                                     key={user.id}
-                                    className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-100"
+                                    className="bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700/50 dark:border-gray-700 border-b transition duration-100"
                                 >
                                     <th
                                         scope="row"
-                                        className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white"
+                                        className="px-6 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap"
                                     >
                                         {user.display_name}
                                     </th>
