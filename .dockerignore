@@ -17,6 +17,7 @@ node_modules
 /backend-ws/build
 /frontend/dist
 /frontend/build
+/frontend/.next
 
 # Cache, logs et fichiers temporaires
 logs
