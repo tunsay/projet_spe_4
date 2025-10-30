@@ -12,7 +12,7 @@ type SocketEntry = {
 const sockets = new Map<string, SocketEntry>();
 
 const createSocketForDocument = (documentId: string): Socket => {
-    const socket = io("ws://172.26.123.36:3006", {
+    const socket = io(process.env.NEXT_PUBLIC_WS_URL, {
         transports: ["websocket"],
         auth: {
             token: typeof window !== "undefined" ? window.localStorage.getItem("collaboratif_token") : null,
