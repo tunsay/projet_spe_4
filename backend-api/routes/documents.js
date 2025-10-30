@@ -17,9 +17,11 @@ const upload = multer({
  * @openapi
  * /documents:
  *   get:
- *     summary: Liste des dossiers et fichiers accessibles avec hiérarchie
+ *     summary: Liste des dossiers et fichiers de l'utilisateur avec hiérarchie
  *     tags:
  *       - Documents
+ *     security:
+ *       - BearerAuth: []
  *     responses:
  *       '200':
  *         description: OK
@@ -51,9 +53,19 @@ const upload = multer({
  *                   children:
  *                     type: array
  *                     description: Enfants du dossier (récursif)
+ *       '401':
+ *         description: Authentification requise
+ *       '500':
+ *         description: Erreur serveur interne
  */
 router.get("/", async (req, res) => {
   try {
+    const userId = req.userId; // Récupéré du middleware d'authentification
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentification requise" });
+    }
+
     // Fonction récursive pour construire la hiérarchie
     const buildHierarchy = async (parentId) => {
       const result = await pool.query(
@@ -66,9 +78,10 @@ router.get("/", async (req, res) => {
           d.created_at,
           d.mime_type
         FROM "documents" d
-        WHERE d.parent_id ${parentId ? "= $1" : "IS NULL"}
+        WHERE d.owner_id = $1 
+        AND d.parent_id ${parentId ? "= $2" : "IS NULL"}
         ORDER BY d.created_at DESC`,
-        parentId ? [parentId] : []
+        parentId ? [userId, parentId] : [userId]
       );
 
       const documents = [];

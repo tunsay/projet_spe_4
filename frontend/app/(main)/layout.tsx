@@ -7,7 +7,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         <>
             <Header />
             {/* si ton Header est sticky/fixed, ajuste le padding-top */}
-            <main className="min-h-screen bg-gray-50">{children}</main>
+            <main className="min-h-screen bg-gray-900">{children}</main>
         </>
     );
 }

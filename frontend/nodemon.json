@@ -1,0 +1,15 @@
+{
+  "watch": [
+    "next.config.ts",
+    "next.config.js",
+    ".env.local",
+    ".env.production"
+  ],
+  "ext": "js,mjs,cjs,ts,tsx,json,env",
+  "ignore": [
+    "node_modules",
+    ".next",
+    "public"
+  ],
+  "exec": "next dev --port 8081"
+}
