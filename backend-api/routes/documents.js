@@ -360,7 +360,7 @@ router.post("/", async (req, res) => {
 router.put("/:id/metadata", async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.headers["user-id"];
+    const owner_id = req.userId;
     const { name, parent_id } = req.body;
 
     if (!owner_id) {
@@ -553,12 +553,29 @@ router.put("/:id/metadata", async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params;    
+    const user_id = req.userId;
+
+    if (!user_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
 
     // Valider UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
       return res.status(400).json({ error: "ID invalide (doit être un UUID)" });
+    }
+
+    // Vérifier les permission
+    const permission = await DocumentPermission.findOne({
+      where: {
+        user_id : user_id,
+        document_id : id
+      }
+    })
+
+    if (!permission) {
+      return res.status(403).json({ error: "Accès refusé" });
     }
 
     // Récupérer le document
@@ -617,7 +634,12 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/download", async (req, res) => {
   try {
     const { id } = req.params;
-    const inline = req.query.inline === "1" || req.query.inline === "true";
+    const inline = req.query.inline === "1" || req.query.inline === "true"; 
+    const user_id = req.userId;
+
+    if (!user_id) {
+      return res.status(401).json({ error: "User ID requis (header: user-id)" });
+    }
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
@@ -637,6 +659,18 @@ router.get("/:id/download", async (req, res) => {
 
     if (document.type === "folder") {
       return res.status(400).json({ error: "Les dossiers ne peuvent pas être téléchargés." });
+    }
+
+    // Vérifier les permission
+    const permission = await DocumentPermission.findOne({
+      where: {
+        user_id : user_id,
+        document_id : id
+      }
+    })
+
+    if (!permission) {
+      return res.status(403).json({ error: "Accès refusé" });
     }
 
     if (document.type === "file") {
@@ -706,7 +740,7 @@ router.get("/:id/download", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.headers["user-id"];
+    const owner_id = req.userId;
 
     if (!owner_id) {
       return res.status(401).json({ error: "User ID requis (header: user-id)" });
@@ -1422,7 +1456,7 @@ router.put("/file/:id", upload.single("file"), async (req, res) => {
 router.post("/:id/invite", async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.headers["user-id"];
+    const owner_id = req.userId;
     const { email, permission } = req.body;
 
     if (!owner_id) {

@@ -21,7 +21,7 @@ router.get("/:id", getMessagesBySessionId);
 
 /**
  * @openapi
- * /documents/{id}:
+ * /messages/{id}:
  *   post:
  *     summary: Envoie un message sur la collaboration d'un document
  *     tags:
@@ -33,7 +33,7 @@ router.post("/:id", setMessageBySessionsId);
 
 /**
  * @openapi
- * /documents/{id}:
+ * /messages/{id}:
  *   put:
  *     summary: Modifier un message
  *     tags:
@@ -46,7 +46,7 @@ router.put("/:id", editMessageById);
 
 /**
  * @openapi
- * /documents/{id}:
+ * /messages/{id}:
  *   delete:
  *     summary: Supprimer un message
  *     tags:

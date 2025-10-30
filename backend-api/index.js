@@ -22,6 +22,7 @@ const profileRoutes = require("./routes/profile.js");
 const adminRoutes = require("./routes/admin.js");
 const documentRoutes = require("./routes/documents.js");
 const messageRoutes = require("./routes/messages.js");
+const sessionsRoutes = require("./routes/sessions.js");
 
 const app = express();
 
@@ -102,6 +103,7 @@ app.use("/api/profile", auth, profileRoutes); // Profil utilisateur (nécessite 
 app.use("/api/admin", adminRoutes); // Routes d'administration (nécessite d'être admin)
 app.use("/api/documents", auth, documentRoutes); // Routes de documents (nécessite d'être connecté)
 app.use("/api/messages", auth, messageRoutes); // Routes de messages (nécessite d'être connecté)
+app.use("/api/sessions", auth, sessionsRoutes); // Routes des participants de sessions (nécessite d'être connecté)
 
 // --- Gestion des Erreurs et 404 ---
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not Found" }));
