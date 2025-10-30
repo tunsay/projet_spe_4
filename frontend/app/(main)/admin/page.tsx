@@ -20,8 +20,6 @@ interface NewUserData {
 
 const ADMIN_ENDPOINTS = {
     USERS: buildApiUrl("/api/admin/users"),
-    BLOCK: buildApiUrl("/api/admin/users/block"),
-    UNBLOCK: buildApiUrl("/api/admin/users/unblock"),
 };
 
 export default function AdminUsersPage() {
@@ -97,9 +95,7 @@ export default function AdminUsersPage() {
 
     const handleBlockToggle = useCallback(
         async (userId: number | string, isBlocked: boolean) => {
-            const endpoint = isBlocked
-                ? ADMIN_ENDPOINTS.UNBLOCK
-                : ADMIN_ENDPOINTS.BLOCK;
+            const endpoint = isBlocked ? "unblock" : "block";
             const action = isBlocked ? "Déblocage" : "Blocage";
 
             setUsers((prevUsers) =>
@@ -109,10 +105,13 @@ export default function AdminUsersPage() {
             );
 
             try {
-                const response = await fetch(`${endpoint}/${userId}`, {
-                    method: "POST",
-                    credentials: "include",
-                });
+                const response = await fetch(
+                    `${ADMIN_ENDPOINTS.USERS}/${userId}/${endpoint}`,
+                    {
+                        method: "PUT",
+                        credentials: "include",
+                    }
+                );
 
                 if (!response.ok) {
                     setUsers((prevUsers) =>
@@ -136,7 +135,7 @@ export default function AdminUsersPage() {
                         false
                     );
                 }
-            } catch (err) {
+            } catch {
                 setUsers((prevUsers) =>
                     prevUsers.map((u) =>
                         u.id === userId ? { ...u, is_blocked: isBlocked } : u
@@ -231,7 +230,7 @@ export default function AdminUsersPage() {
                     Inscrire un nouvel utilisateur
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="gap-4 grid grid-cols-1 md:grid-cols-4">
                     <input
                         type="email"
                         name="email"
@@ -330,7 +329,7 @@ export default function AdminUsersPage() {
                                 >
                                     <th
                                         scope="row"
-                                        className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white"
+                                        className="px-6 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap"
                                     >
                                         {user.display_name}
                                     </th>
