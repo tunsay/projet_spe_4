@@ -488,13 +488,16 @@ io.on("connection", (socket) => {
         // Par défaut, socket.send envoie l'événement "message"
     });
 
-    socket.on("disconnect", (reason) => {
+    socket.on("disconnect", async (reason) => {
         console.log("disconnect", socket.id, "reason:", reason);
         // Optionnel : notifier rooms de la départ (presence leave)
-        for (const room of socket.rooms) {
-            if (room.startsWith("document:")) {
+        for (const room of socket.adapter.rooms) {
+            const roomName = Array.from(room)[0];
+            if (roomName?.startsWith("document:")) {
+                const docId = roomName?.split(":")[1];
                 const clients = io.sockets.adapter.rooms.get(room);
                 const membersCount = clients ? clients.size : 0;
+                await closeSession(socket.user, docId);
                 socket.to(room).emit("presence", {
                     type: "left",
                     userId: socket.user?.id,
