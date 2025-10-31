@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import useSocket from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
 import { Socket } from "socket.io-client";
@@ -33,7 +33,228 @@ export default function useRoomDocument(documentId: string) {
         null
     );
     const [joinError, setJoinError] = useState<string | null>(null);
-    const [messagesList, setMessagesList] = useState<ChatMessageEntry[]>([]);
+    const [messagesListState, setMessagesListState] =
+        useState<ChatMessageEntry[]>([]);
+    const reactionsStoreRef = useRef<Record<string, Record<string, string[]>>>(
+        {}
+    );
+    const audioContextRef = useRef<AudioContext | null>(null);
+
+    const applyReactionsToMessages = useCallback(
+        (list: ChatMessageEntry[]): ChatMessageEntry[] => {
+            if (!Array.isArray(list)) return list;
+            const store = reactionsStoreRef.current;
+            if (!store) return list;
+            let changed = false;
+            const next = list.map((message) => {
+                const messageId = String(message.id);
+                const stored = store[messageId] || {};
+                const current = message.reactions || {};
+                const currentKeys = Object.keys(current);
+                const storedKeys = Object.keys(stored);
+                let same = currentKeys.length === storedKeys.length;
+                if (same) {
+                    for (const key of storedKeys) {
+                        const currentIds = current[key] || [];
+                        const storedIds = stored[key] || [];
+                        if (currentIds.length !== storedIds.length) {
+                            same = false;
+                            break;
+                        }
+                        for (const id of storedIds) {
+                            if (!currentIds.includes(id)) {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if (!same) break;
+                    }
+                }
+                if (same) return message;
+                changed = true;
+                return { ...message, reactions: { ...stored } };
+            });
+            return changed ? next : list;
+        },
+        []
+    );
+
+    const refreshMessagesFromReactions = useCallback(() => {
+        setMessagesListState((prev) => applyReactionsToMessages(prev));
+    }, [applyReactionsToMessages]);
+
+    type MessageListUpdate =
+        | ChatMessageEntry[]
+        | ((prev: ChatMessageEntry[]) => ChatMessageEntry[]);
+
+    const setMessagesList = useCallback(
+        (update: MessageListUpdate) => {
+            setMessagesListState((prev) => {
+                const next =
+                    typeof update === "function"
+                        ? (update as (prev: ChatMessageEntry[]) => ChatMessageEntry[])(prev)
+                        : update;
+                if (!Array.isArray(next)) return prev;
+                return applyReactionsToMessages(next);
+            });
+        },
+        [applyReactionsToMessages]
+    );
+
+    const messagesList = messagesListState;
+
+    const normalizeUnknownReactionRecord = (
+        input: unknown
+    ): Record<string, string[]> => {
+        if (!input || typeof input !== "object") return {};
+        const result: Record<string, string[]> = {};
+        for (const [emoji, value] of Object.entries(
+            input as Record<string, unknown>
+        )) {
+            if (typeof emoji !== "string") continue;
+            if (Array.isArray(value)) {
+                const filtered = value.filter(
+                    (entry): entry is string =>
+                        typeof entry === "string" && entry.length > 0
+                );
+                if (filtered.length > 0) {
+                    result[emoji] = [...filtered];
+                }
+            }
+        }
+        return result;
+    };
+
+    const normalizeReactionSnapshot = (
+        raw: unknown
+    ): Record<string, Record<string, string[]>> => {
+        if (!raw || typeof raw !== "object") return {};
+        const snapshot: Record<string, Record<string, string[]>> = {};
+        for (const [messageId, value] of Object.entries(
+            raw as Record<string, unknown>
+        )) {
+            if (typeof messageId !== "string") continue;
+            const normalizedMap = normalizeUnknownReactionRecord(value);
+            if (Object.keys(normalizedMap).length > 0) {
+                snapshot[messageId] = normalizedMap;
+            }
+        }
+        return snapshot;
+    };
+
+    const replaceReactionStore = useCallback(
+        (snapshot: Record<string, Record<string, string[]>>) => {
+            reactionsStoreRef.current = snapshot;
+            refreshMessagesFromReactions();
+        },
+        [refreshMessagesFromReactions]
+    );
+
+    const setMessageReactions = useCallback(
+        (messageId: string, reactions?: Record<string, string[]>) => {
+            const store = reactionsStoreRef.current;
+            const normalized = normalizeUnknownReactionRecord(reactions ?? {});
+            if (Object.keys(normalized).length === 0) {
+                if (store[messageId]) {
+                    delete store[messageId];
+                    refreshMessagesFromReactions();
+                }
+                return;
+            }
+            store[messageId] = normalized;
+            refreshMessagesFromReactions();
+        },
+        [refreshMessagesFromReactions]
+    );
+
+    const applyReactionDiff = useCallback(
+        (messageId: string, emoji: string, userIds: string[]) => {
+            const store = reactionsStoreRef.current;
+            const normalizedIds = userIds.filter(
+                (id): id is string => typeof id === "string" && id.length > 0
+            );
+            if (normalizedIds.length === 0) {
+                if (store[messageId]) {
+                    delete store[messageId][emoji];
+                    if (Object.keys(store[messageId]).length === 0) {
+                        delete store[messageId];
+                    }
+                    refreshMessagesFromReactions();
+                }
+                return;
+            }
+            if (!store[messageId]) {
+                store[messageId] = {};
+            }
+            store[messageId][emoji] = Array.from(new Set(normalizedIds));
+            refreshMessagesFromReactions();
+        },
+        [refreshMessagesFromReactions]
+    );
+
+    const playIncomingMessageTone = useCallback(() => {
+        if (typeof window === "undefined") return;
+        const AudioContextCtor =
+            window.AudioContext ||
+            (window as unknown as {
+                webkitAudioContext?: typeof AudioContext;
+            }).webkitAudioContext;
+        if (!AudioContextCtor) return;
+
+        if (
+            !audioContextRef.current ||
+            audioContextRef.current.state === "closed"
+        ) {
+            try {
+                audioContextRef.current = new AudioContextCtor();
+            } catch (error) {
+                audioContextRef.current = null;
+            }
+        }
+
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+
+        if (ctx.state === "suspended") {
+            ctx.resume().catch(() => {});
+        }
+
+        try {
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const now = ctx.currentTime;
+
+            oscillator.type = "triangle";
+            oscillator.frequency.setValueAtTime(880, now);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.04, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+
+            oscillator.start(now);
+            oscillator.stop(now + 0.35);
+        } catch (error) {
+            // ignore audio errors (autoplay restrictions, etc.)
+        }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            const ctx = audioContextRef.current;
+            if (ctx) {
+                try {
+                    if (ctx.state !== "closed") {
+                        ctx.close().catch(() => {});
+                    }
+                } catch (error) {
+                    // ignore cleanup errors
+                }
+            }
+            audioContextRef.current = null;
+        };
+    }, []);
 
     useEffect(() => {
         if (!socket) return;
@@ -57,6 +278,13 @@ export default function useRoomDocument(documentId: string) {
                         : membersCount
                 );
                 setJoinError(null);
+                if ("reactions" in payload) {
+                    replaceReactionStore(
+                        normalizeReactionSnapshot(payload.reactions)
+                    );
+                } else {
+                    replaceReactionStore({});
+                }
             } else if (payload.ok === false) {
                 setJoinError(payload.reason || "unknown_reason");
             }
@@ -118,6 +346,7 @@ export default function useRoomDocument(documentId: string) {
         on("presence", handlePresence);
         on("doc-change", handleDocChange);
         on("chat:new-message", handleIncomingMessage);
+        on("chat:reaction", handleIncomingReaction);
 
         on("connect", handleConnect);
         on("disconnect", handleDisconnect);
@@ -129,6 +358,7 @@ export default function useRoomDocument(documentId: string) {
                 off("presence", handlePresence);
                 off("doc-change", handleDocChange);
                 off("chat:new-message", handleIncomingMessage);
+                off("chat:reaction", handleIncomingReaction);
                 off("connect", handleConnect);
                 off("disconnect", handleDisconnect);
             } catch (e) {
@@ -179,7 +409,32 @@ export default function useRoomDocument(documentId: string) {
         }
 
         const normalized = normalizeMessageRecord(rawMessage);
+        setMessageReactions(
+            String(normalized.id),
+            normalized.reactions ?? {}
+        );
+        playIncomingMessageTone();
         setMessagesList((current) => upsertMessage(current, normalized));
+    };
+
+    const handleIncomingReaction = (payload: unknown) => {
+        if (!payload || typeof payload !== "object") return;
+        const { docId, messageId, emoji, userIds } = payload as {
+            docId?: string;
+            messageId?: string | number;
+            emoji?: string;
+            userIds?: unknown;
+        };
+        if (docId !== documentId) return;
+        if (messageId === undefined || messageId === null) return;
+        if (!emoji || typeof emoji !== "string") return;
+        const normalizedUsers = Array.isArray(userIds)
+            ? userIds.filter(
+                  (entry): entry is string =>
+                      typeof entry === "string" && entry.length > 0
+              )
+            : [];
+        applyReactionDiff(String(messageId), emoji, normalizedUsers);
     };
 
     const sendMessage = useCallback(
@@ -190,6 +445,7 @@ export default function useRoomDocument(documentId: string) {
             if (!socket) return Promise.reject(new Error("no-socket"));
 
             return new Promise<ChatMessageEntry>((resolve, reject) => {
+                let optimisticKey: string | null = null;
                 try {
                     // Optimistically add the message to the list
                     const optimistic = normalizeMessageRecord(
@@ -197,6 +453,7 @@ export default function useRoomDocument(documentId: string) {
                         fallbackId
                     );
                     setMessagesList((cur) => upsertMessage(cur, optimistic));
+                    optimisticKey = String(optimistic.id);
 
                     socket.emit(
                         "chat:new-message",
@@ -206,13 +463,39 @@ export default function useRoomDocument(documentId: string) {
                                 const normalized = normalizeMessageRecord(
                                     ack.message ?? outboundMessage
                                 );
-                                setMessagesList((cur) =>
-                                    upsertMessage(cur, normalized)
+                                setMessageReactions(
+                                    String(normalized.id),
+                                    normalized.reactions ?? {}
                                 );
+                                setMessagesList((cur) => {
+                                    const withoutOptimistic = cur.filter(
+                                        (item) =>
+                                            String(item.id) !==
+                                            (optimisticKey ??
+                                                String(fallbackId))
+                                    );
+                                    return upsertMessage(
+                                        withoutOptimistic,
+                                        normalized
+                                    );
+                                });
                                 return resolve(normalized);
                             }
 
                             if (ack && ack.ok === false) {
+                                const keyToClear =
+                                    optimisticKey ?? fallbackId ?? null;
+                                if (keyToClear !== null) {
+                                    setMessageReactions(String(keyToClear), {});
+                                }
+                                setMessagesList((cur) =>
+                                    cur.filter(
+                                        (item) =>
+                                            String(item.id) !==
+                                            (optimisticKey ??
+                                                String(fallbackId))
+                                    )
+                                );
                                 return reject(
                                     new Error(ack.reason || "server_rejected")
                                 );
@@ -223,11 +506,83 @@ export default function useRoomDocument(documentId: string) {
                         }
                     );
                 } catch (e) {
+                    const keyToClear =
+                        optimisticKey ?? fallbackId ?? null;
+                    if (keyToClear !== null) {
+                        setMessageReactions(String(keyToClear), {});
+                    }
+                    setMessagesList((cur) =>
+                        cur.filter(
+                            (item) =>
+                                String(item.id) !==
+                                (optimisticKey ?? String(fallbackId))
+                        )
+                    );
                     reject(e as Error);
                 }
             });
         },
         [socket, documentId]
+    );
+
+    const toggleReaction = useCallback(
+        (messageId: string | number, emoji: string) => {
+            if (!socket) return Promise.reject(new Error("no-socket"));
+            const messageKey = String(messageId);
+            const emojiKey = String(emoji);
+            return new Promise<{
+                messageId: string;
+                emoji: string;
+                userIds: string[];
+            }>((resolve, reject) => {
+                try {
+                    socket.emit(
+                        "chat:react",
+                        { docId: documentId, messageId: messageKey, emoji: emojiKey },
+                        (ack: any) => {
+                            if (ack && ack.ok === true) {
+                                const reactionPayload =
+                                    ack.reaction && typeof ack.reaction === "object"
+                                        ? ack.reaction
+                                        : null;
+                                const userIds = Array.isArray(
+                                    reactionPayload?.userIds
+                                )
+                                    ? (reactionPayload.userIds as unknown[]).filter(
+                                          (entry): entry is string =>
+                                              typeof entry === "string" &&
+                                              entry.length > 0
+                                      )
+                                    : [];
+                                applyReactionDiff(messageKey, emojiKey, userIds);
+                                return resolve({
+                                    messageId: messageKey,
+                                    emoji: emojiKey,
+                                    userIds,
+                                });
+                            }
+                            if (ack && ack.ok === false) {
+                                return reject(
+                                    new Error(ack.reason || "server_rejected")
+                                );
+                            }
+                            // No ack provided; resolve with current snapshot
+                            const store = reactionsStoreRef.current;
+                            const current =
+                                store[messageKey]?.[emojiKey] ?? [];
+                            resolve({
+                                messageId: messageKey,
+                                emoji: emojiKey,
+                                userIds: current,
+                            });
+                        }
+                    );
+                } catch (error) {
+                    reject(error as Error);
+                }
+            });
+        },
+        [socket, documentId, applyReactionDiff]
     );
 
     return {
@@ -242,6 +597,7 @@ export default function useRoomDocument(documentId: string) {
         sendChange,
         handleIncomingMessage,
         sendMessage,
+        toggleReaction,
         messagesList,
         setMessagesList,
     };

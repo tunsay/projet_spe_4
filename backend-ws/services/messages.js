@@ -16,17 +16,16 @@ export async function persistChatMessage(user, documentId, message) {
         throw new Error("invalid_message_content");
     }
 
-    const response = await fetch(
-        `${process.env.API_INTERNAL_URL}/api/messages/${documentId}`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Cookie: `token=${user.token}`,
-            },
-            body: JSON.stringify({ content }),
-        }
-    );
+    const response = await fetch(`${process.env.API_INTERNAL_URL}/api/messages/${documentId}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+            Cookie: `token=${user.token}`,
+            "user-id": user.id,
+        },
+        body: JSON.stringify({ content }),
+    });
 
     if (!response.ok) {
         const errorText = await response.text().catch(() => "");

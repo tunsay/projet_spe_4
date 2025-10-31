@@ -48,6 +48,7 @@ export const normalizeMessageRecord = (
             created_at: new Date().toISOString(),
             authorName: null,
             authorEmail: null,
+            reactions: {},
         };
     }
 
@@ -89,6 +90,46 @@ export const normalizeMessageRecord = (
         pickFromRecord(author, ["email"], { allowEmpty: true }) ??
         null;
 
+    const normalizedReactions: Record<string, string[]> = {};
+    const rawReactions =
+        (record.reactions as unknown) ??
+        (record.Reactions as unknown) ??
+        undefined;
+    if (rawReactions && typeof rawReactions === "object") {
+        for (const [emoji, value] of Object.entries(
+            rawReactions as Record<string, unknown>
+        )) {
+            if (typeof emoji !== "string") continue;
+            if (Array.isArray(value)) {
+                const userIds = value
+                    .map((entry) =>
+                        typeof entry === "string"
+                            ? entry
+                            : entry && typeof entry === "object" && "user_id" in entry
+                            ? getString(
+                                  (entry as { user_id?: unknown }).user_id
+                              )
+                            : null
+                    )
+                    .filter((candidate): candidate is string => !!candidate);
+                if (userIds.length > 0) normalizedReactions[emoji] = userIds;
+            } else if (
+                value &&
+                typeof value === "object" &&
+                "userIds" in (value as Record<string, unknown>)
+            ) {
+                const fromObject = (value as Record<string, unknown>).userIds;
+                if (Array.isArray(fromObject)) {
+                    const userIds = fromObject.filter(
+                        (candidate): candidate is string =>
+                            typeof candidate === "string" && candidate.length > 0
+                    );
+                    if (userIds.length > 0) normalizedReactions[emoji] = userIds;
+                }
+            }
+        }
+    }
+
     return {
         id: normalizedId,
         content,
@@ -96,6 +137,7 @@ export const normalizeMessageRecord = (
         created_at: createdAt,
         authorName,
         authorEmail,
+        reactions: normalizedReactions,
     };
 };
 

@@ -18,6 +18,49 @@ const io = new Server({
     path: "/",
 });
 
+const reactionStore = new Map();
+
+const getDocumentReactionStore = (docId) => {
+    let docStore = reactionStore.get(docId);
+    if (!docStore) {
+        docStore = new Map();
+        reactionStore.set(docId, docStore);
+    }
+    return docStore;
+};
+
+const serializeMessageReactions = (docId, messageId) => {
+    const docStore = reactionStore.get(docId);
+    if (!docStore) return {};
+    const messageStore = docStore.get(messageId);
+    if (!messageStore) return {};
+    const result = {};
+    for (const [emoji, users] of messageStore.entries()) {
+        if (users.size > 0) {
+            result[emoji] = Array.from(users);
+        }
+    }
+    return result;
+};
+
+const serializeDocumentReactions = (docId) => {
+    const docStore = reactionStore.get(docId);
+    if (!docStore) return {};
+    const result = {};
+    for (const [messageId, emojiMap] of docStore.entries()) {
+        const serialized = {};
+        for (const [emoji, users] of emojiMap.entries()) {
+            if (users.size > 0) {
+                serialized[emoji] = Array.from(users);
+            }
+        }
+        if (Object.keys(serialized).length > 0) {
+            result[messageId] = serialized;
+        }
+    }
+    return result;
+};
+
 // Middleware d'auth au handshake
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -102,7 +145,16 @@ io.on("connection", (socket) => {
                 const membersCount = clients ? clients.size : 0;
 
                 // Notifier le client qu'il a rejoint
-                respond({ ok: true, docId, membersCount, initialState }, cb);
+                respond(
+                    {
+                        ok: true,
+                        docId,
+                        membersCount,
+                        initialState,
+                        reactions: serializeDocumentReactions(docId),
+                    },
+                    cb
+                );
 
                 // Notifier les autres membres
                 socket.to(room).emit("presence", {
@@ -202,13 +254,135 @@ io.on("connection", (socket) => {
                 docId,
                 message
             );
+            const existingAuthor =
+                persistedMessage &&
+                typeof persistedMessage === "object" &&
+                persistedMessage.author &&
+                typeof persistedMessage.author === "object"
+                    ? persistedMessage.author
+                    : {};
+            const enrichedAuthor = {
+                id:
+                    existingAuthor.id ??
+                    persistedMessage?.user_id ??
+                    socket.user.id,
+                email:
+                    existingAuthor.email ??
+                    socket.user.email ??
+                    null,
+                display_name:
+                    (existingAuthor.display_name &&
+                        existingAuthor.display_name.trim &&
+                        existingAuthor.display_name.trim()) ||
+                    (existingAuthor.name &&
+                        existingAuthor.name.trim &&
+                        existingAuthor.name.trim()) ||
+                    (socket.user.displayName &&
+                        socket.user.displayName.trim &&
+                        socket.user.displayName.trim()) ||
+                    (socket.user.email &&
+                        typeof socket.user.email === "string" &&
+                        socket.user.email.trim()) ||
+                    socket.user.id,
+            };
+            const rawMessageId =
+                (persistedMessage && (persistedMessage.id || persistedMessage.message_id)) ??
+                (message && message.id);
+            const messageId =
+                rawMessageId !== undefined && rawMessageId !== null
+                    ? String(rawMessageId)
+                    : undefined;
+            const enrichedMessage = {
+                ...persistedMessage,
+                id: messageId ?? persistedMessage?.id ?? message?.id,
+                user_id: persistedMessage?.user_id ?? socket.user.id,
+                author: enrichedAuthor,
+                reactions:
+                    messageId !== undefined
+                        ? serializeMessageReactions(docId, messageId)
+                        : {},
+            };
             socket
                 .to(room)
-                .emit("chat:new-message", { docId, message: persistedMessage });
+                .emit("chat:new-message", { docId, message: enrichedMessage });
             console.log("message after broadcast");
-            return respond({ ok: true, message: persistedMessage }, cb);
+            return respond({ ok: true, message: enrichedMessage }, cb);
         } catch (error) {
             console.error("Error in chat:new-message:", error);
+            const reason =
+                (error && typeof error === "object" && "message" in error
+                    ? error.message
+                    : null) || "internal_error";
+            return respond({ ok: false, reason }, cb);
+        }
+    });
+
+    socket.on("chat:react", ({ docId, messageId, emoji }, cb) => {
+        try {
+            if (
+                !docId ||
+                messageId === undefined ||
+                messageId === null ||
+                !emoji
+            ) {
+                return respond({ ok: false, reason: "invalid_payload" }, cb);
+            }
+
+            const room = `document:${docId}`;
+            if (!socket.rooms.has(room)) {
+                return respond({ ok: false, reason: "not_joined" }, cb);
+            }
+
+            const normalizedMessageId = String(messageId);
+            const normalizedEmoji = String(emoji).trim();
+            if (!normalizedEmoji) {
+                return respond({ ok: false, reason: "invalid_emoji" }, cb);
+            }
+            const docStore = getDocumentReactionStore(docId);
+            let messageMap = docStore.get(normalizedMessageId);
+            if (!messageMap) {
+                messageMap = new Map();
+                docStore.set(normalizedMessageId, messageMap);
+            }
+            let userSet = messageMap.get(normalizedEmoji);
+            if (!userSet) {
+                userSet = new Set();
+                messageMap.set(normalizedEmoji, userSet);
+            }
+
+            if (userSet.has(socket.user.id)) {
+                userSet.delete(socket.user.id);
+                if (userSet.size === 0) {
+                    messageMap.delete(normalizedEmoji);
+                }
+            } else {
+                userSet.add(socket.user.id);
+            }
+
+            if (messageMap.size === 0) {
+                docStore.delete(normalizedMessageId);
+            }
+
+            if (docStore.size === 0) {
+                reactionStore.delete(docId);
+            }
+
+            const updatedUsers =
+                messageMap.get(normalizedEmoji) && messageMap.get(normalizedEmoji).size > 0
+                    ? Array.from(messageMap.get(normalizedEmoji))
+                    : [];
+
+            const reactionPayload = {
+                docId,
+                messageId: normalizedMessageId,
+                emoji: normalizedEmoji,
+                userIds: updatedUsers,
+            };
+
+            socket.to(room).emit("chat:reaction", reactionPayload);
+            return respond({ ok: true, reaction: reactionPayload }, cb);
+        } catch (error) {
+            console.error("Error in chat:react:", error);
             return respond({ ok: false, reason: "internal_error" }, cb);
         }
     });

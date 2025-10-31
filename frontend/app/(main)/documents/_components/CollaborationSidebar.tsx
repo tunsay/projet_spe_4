@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
     ChatBubbleLeftRightIcon,
     UserGroupIcon,
@@ -27,6 +27,12 @@ interface CollaborationSidebarProps {
     onOpenInviteModal: () => void;
     resolveAuthorName: (userId: string, fallbackName?: string | null) => string;
     isRealtimeReady: boolean;
+    onToggleReaction: (
+        messageId: string | number,
+        emoji: string
+    ) => Promise<unknown> | void;
+    emojiOptions: string[];
+    currentUserId: string | null;
 }
 
 export function CollaborationSidebar({
@@ -45,14 +51,59 @@ export function CollaborationSidebar({
     onOpenInviteModal,
     resolveAuthorName,
     isRealtimeReady,
+    onToggleReaction,
+    emojiOptions,
+    currentUserId,
 }: CollaborationSidebarProps) {
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const [composerEmojiOpen, setComposerEmojiOpen] = useState(false);
+    const [reactionPickerTarget, setReactionPickerTarget] = useState<
+        string | null
+    >(null);
+
+    const handleReactionToggle = (
+        messageId: string | number,
+        emoji: string
+    ) => {
+        setReactionPickerTarget(null);
+        try {
+            const maybePromise = onToggleReaction(messageId, emoji);
+            if (
+                maybePromise &&
+                typeof (maybePromise as Promise<unknown>).catch === "function"
+            ) {
+                (maybePromise as Promise<unknown>).catch((error) =>
+                    console.error("Erreur réaction:", error)
+                );
+            }
+        } catch (error) {
+            console.error("Erreur réaction:", error);
+        }
+    };
+
+    const handleReactionEmojiSelect = (
+        messageId: string | number,
+        emoji: string
+    ) => {
+        handleReactionToggle(messageId, emoji);
+    };
+
+    const handleComposerEmojiSelect = (emoji: string) => {
+        onNewMessageChange(`${newMessage}${emoji}`);
+        setComposerEmojiOpen(false);
+    };
+
+    const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+        setComposerEmojiOpen(false);
+        setReactionPickerTarget(null);
+        onSendMessage(event);
+    };
 
     useEffect(() => {
         if (!isRealtimeReady) return;
         const container = scrollContainerRef.current;
         if (!container) return;
-        container.scrollTop = container.scrollHeight;
+        container.scrollTop = 0;
     }, [messages, isRealtimeReady]);
 
     if (!isRealtimeReady) {
@@ -71,7 +122,10 @@ export function CollaborationSidebar({
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                         <span className="flex items-center gap-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                            <UserGroupIcon aria-hidden="true" className="h-4 w-4" />
+                            <UserGroupIcon
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                            />
                             Collaborateurs
                         </span>
                         <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -84,7 +138,10 @@ export function CollaborationSidebar({
                             onClick={onOpenInviteModal}
                             className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition duration-150 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"
                         >
-                            <UserPlusIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                            <UserPlusIcon
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5"
+                            />
                             Inviter
                         </button>
                     )}
@@ -104,7 +161,9 @@ export function CollaborationSidebar({
                         <ul className="space-y-2">
                             {participants.map((participant) => (
                                 <li
-                                    key={participant.userId || participant.email}
+                                    key={
+                                        participant.userId || participant.email
+                                    }
                                     className="rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
                                 >
                                     <div className="flex items-center justify-between gap-2">
@@ -143,7 +202,7 @@ export function CollaborationSidebar({
                 </div>
                 <div
                     ref={scrollContainerRef}
-                    className="mt-3 min-h-[220px] flex-1 overflow-y-auto pr-1"
+                    className="mt-3 h-80 overflow-y-auto pr-1"
                 >
                     {messagesLoading && !messages.length ? (
                         <div className="space-y-2">
@@ -157,6 +216,13 @@ export function CollaborationSidebar({
                                     chat.user_id,
                                     chat.authorName ?? chat.authorEmail ?? null
                                 );
+                                const messageKey = String(chat.id);
+                                const reactionEntries = Object.entries(
+                                    chat.reactions ?? {}
+                                ).filter(
+                                    ([, users]) =>
+                                        Array.isArray(users) && users.length > 0
+                                );
                                 return (
                                     <div
                                         key={chat.id}
@@ -166,11 +232,110 @@ export function CollaborationSidebar({
                                             <span className="font-semibold text-slate-700 dark:text-slate-200">
                                                 {displayName}
                                             </span>
-                                            <span>{formatTimestamp(chat.created_at)}</span>
+                                            <span>
+                                                {formatTimestamp(
+                                                    chat.created_at
+                                                )}
+                                            </span>
                                         </div>
                                         <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
                                             {chat.content}
                                         </p>
+                                        {(reactionEntries.length > 0 ||
+                                            emojiOptions.length > 0) && (
+                                            <div className="relative mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                                {reactionEntries.map(
+                                                    ([emoji, users]) => {
+                                                        const normalizedUsers =
+                                                            Array.isArray(users)
+                                                                ? users.filter(
+                                                                      (
+                                                                          entry
+                                                                      ): entry is string =>
+                                                                          typeof entry ===
+                                                                              "string" &&
+                                                                          entry.length >
+                                                                              0
+                                                                  )
+                                                                : [];
+                                                        const reacted =
+                                                            !!currentUserId &&
+                                                            normalizedUsers.includes(
+                                                                currentUserId
+                                                            );
+                                                        return (
+                                                            <button
+                                                                key={`${messageKey}-${emoji}`}
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    handleReactionToggle(
+                                                                        messageKey,
+                                                                        emoji
+                                                                    )
+                                                                }
+                                                                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 transition ${
+                                                                    reacted
+                                                                        ? "border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-500/60 dark:bg-indigo-500/10 dark:text-indigo-200"
+                                                                        : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700"
+                                                                }`}
+                                                            >
+                                                                <span>
+                                                                    {emoji}
+                                                                </span>
+                                                                <span>
+                                                                    {
+                                                                        normalizedUsers.length
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    }
+                                                )}
+                                                {emojiOptions.length > 0 && (
+                                                    <div className="relative">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setReactionPickerTarget(
+                                                                    (current) =>
+                                                                        current ===
+                                                                        messageKey
+                                                                            ? null
+                                                                            : messageKey
+                                                                )
+                                                            }
+                                                            className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+                                                        >
+                                                            + Réagir
+                                                        </button>
+                                                        {reactionPickerTarget ===
+                                                            messageKey && (
+                                                            <div className="absolute z-20 mt-2 flex max-w-60 flex-row items-center gap-1 overflow-x-auto whitespace-nowrap rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                                                                {emojiOptions.map(
+                                                                    (emoji) => (
+                                                                        <button
+                                                                            key={`${messageKey}-picker-${emoji}`}
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                handleReactionEmojiSelect(
+                                                                                    messageKey,
+                                                                                    emoji
+                                                                                )
+                                                                            }
+                                                                            className="h-8 w-8 shrink-0 rounded-md text-lg hover:bg-slate-100 dark:hover:bg-gray-800"
+                                                                        >
+                                                                            {
+                                                                                emoji
+                                                                            }
+                                                                        </button>
+                                                                    )
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -186,22 +351,57 @@ export function CollaborationSidebar({
                         {messagesError}
                     </p>
                 )}
-                <form className="mt-3 space-y-2" onSubmit={onSendMessage}>
+                <form className="mt-3 space-y-2" onSubmit={handleFormSubmit}>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                         Nouveau message
                         <textarea
                             value={newMessage}
-                            onChange={(event) => onNewMessageChange(event.target.value)}
+                            onChange={(event) =>
+                                onNewMessageChange(event.target.value)
+                            }
                             rows={3}
                             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
                             placeholder="Écrire un message à partager…"
                         />
                     </label>
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-between">
+                        {emojiOptions.length > 0 ? (
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setComposerEmojiOpen((prev) => !prev)
+                                    }
+                                    className="rounded-md border border-slate-300 bg-white px-3 py-1 text-lg transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+                                >
+                                    😀
+                                </button>
+                                {composerEmojiOpen && (
+                                    <div className="absolute z-20 mt-2 flex max-w-60 flex-row items-center gap-1 overflow-x-auto whitespace-nowrap rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                                        {emojiOptions.map((emoji) => (
+                                            <button
+                                                key={`composer-${emoji}`}
+                                                type="button"
+                                                onClick={() =>
+                                                    handleComposerEmojiSelect(
+                                                        emoji
+                                                    )
+                                                }
+                                                className="h-8 w-8 shrink-0 rounded-md text-lg hover:bg-slate-100 dark:hover:bg-gray-800"
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <span />
+                        )}
                         <button
                             type="submit"
                             disabled={sendingMessage || !newMessage.trim()}
-                            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition duration-150 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition duration-150 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
                         >
                             {sendingMessage ? "Envoi…" : "Envoyer"}
                         </button>

@@ -37,6 +37,7 @@ export interface ChatMessageEntry {
     created_at: string;
     authorName?: string | null;
     authorEmail?: string | null;
+    reactions?: Record<string, string[]>;
 }
 
 export const formatTimestamp = (value: string) => {

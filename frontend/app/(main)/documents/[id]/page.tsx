@@ -33,6 +33,21 @@ import {
     normalizeErrorMessage,
 } from "@/utils/message";
 
+const MESSAGE_EMOJI_CHOICES = [
+    "😀",
+    "😂",
+    "😍",
+    "👍",
+    "🎉",
+    "😢",
+    "🔥",
+    "🙏",
+    "🤔",
+    "👏",
+    "🙌",
+    "🚀",
+];
+
 export default function DocumentDetailPage() {
     const router = useRouter();
     const routeParams = useParams();
@@ -51,6 +66,7 @@ export default function DocumentDetailPage() {
         messagesList,
         setMessagesList,
         sendMessage,
+        toggleReaction,
     } = useRoomDocument(documentId);
 
     const [profile, setProfile] = useState<Profile | null>(null);
@@ -748,7 +764,7 @@ export default function DocumentDetailPage() {
             if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
                 return 0;
             }
-            return aTime - bTime;
+            return bTime - aTime;
         });
     }, [messagesList]);
 
@@ -803,8 +819,13 @@ export default function DocumentDetailPage() {
                 );
             }
 
-            const fromLookup = messageAuthorLookup.get(userId);
-            if (fromLookup && fromLookup.trim()) {
+            const fromLookupRaw = messageAuthorLookup.get(userId);
+            const fromLookup =
+                (typeof fromLookupRaw === "string" &&
+                    fromLookupRaw.trim().length > 0 &&
+                    fromLookupRaw.trim()) ||
+                null;
+            if (fromLookup && fromLookup !== userId) {
                 return fromLookup;
             }
 
@@ -921,6 +942,9 @@ export default function DocumentDetailPage() {
                     onOpenInviteModal={openInviteModal}
                     resolveAuthorName={resolveAuthorName}
                     isRealtimeReady={isRealtimeReady}
+                    onToggleReaction={toggleReaction}
+                    emojiOptions={MESSAGE_EMOJI_CHOICES}
+                    currentUserId={profile?.id ?? null}
                 />
             </div>
         );
