@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Socket } from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
 import { ChatMessageEntry } from "@/types/documents";
+import { SessionParticipantEntry } from "@/types/documents";
 
 type InitialState = any;
 
@@ -22,6 +23,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
     const [membersCount, setMembersCount] = useState<number>(0);
+    const [participants, setParticipants] = useState<SessionParticipantEntry[]>([]);
     const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(
         null
     );
@@ -354,6 +356,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         socket.on("message", handlePossibleJoinPayload);
         socket.on("presence", handlePresence);
         socket.on("doc-change", handleDocChange);
+        socket.on("position-update", handlePositionUpdate);
         socket.on("chat:new-message", handleIncomingMessage);
         socket.on("chat:reaction", handleIncomingReaction);
 
@@ -367,6 +370,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
                 socket.off("message", handlePossibleJoinPayload);
                 socket.off("presence", handlePresence);
                 socket.off("doc-change", handleDocChange);
+                socket.off("position-update", handlePositionUpdate);
                 socket.off("chat:new-message", handleIncomingMessage);
                 socket.off("chat:reaction", handleIncomingReaction);
                 socket.off("connect", handleConnect);
@@ -403,7 +407,66 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             });
         },
         [socket, documentId]
-    );
+    ); 
+
+    const handlePositionUpdate = (docId : string, userId: string, start : number, end : number, direction : string) =>{
+        if (docId !== documentId) {
+            return;
+        }
+        const participantsUpdated = participants.map(participant =>{
+            if(participant.userId === userId) {
+                participant.start_position = start;
+                participant.end_position = end;
+                participant.direction = direction;
+                return participant;
+            }else{
+                return participant;
+            }
+        })
+        setParticipants(participantsUpdated);
+    }
+
+    const sendNewPosition = useCallback(
+        (docId: string, userId: string, start : number, end : number, direction : string): Promise<SessionParticipantEntry[]> => {
+            if (!socket) return Promise.reject(new Error("no-socket"));
+
+            return new Promise<SessionParticipantEntry[]>((resolve, reject) => {
+                try {
+                    const participantsUpdated = participants.map(participant =>{
+                        if(participant.userId === userId) {
+                            participant.start_position = start;
+                            participant.end_position = end;
+                            participant.direction = direction;
+                            return participant;
+                        }else{
+                            return participant;
+                        }
+                    })
+                    socket.emit(
+                        "position-update",
+                        { docId, userId, start, end, direction },
+                        (ack: any) => {
+                            if (ack && ack.ok === true) {
+                                setParticipants(participantsUpdated);
+                                return resolve(participantsUpdated);
+                            }
+
+                            if (ack && ack.ok === false) {
+                                return reject(new Error(ack.reason || "server_rejected"));
+                            }
+
+                            // No ack provided by server — resolve with optimistic message
+                            setParticipants(participantsUpdated);
+                            return resolve(participantsUpdated);
+                        }
+                    );
+                } catch (e) {
+                    reject(e as Error);
+                }
+            });
+        },
+        [socket, documentId]
+    )
 
     const handleIncomingMessage = (payload: unknown) => {
         if (!payload || typeof payload !== "object" || !("docId" in payload)) {
@@ -607,10 +670,13 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         lastDocChange,
         joinError,
         sendChange,
+        handlePositionUpdate,
+        sendNewPosition,
         handleIncomingMessage,
         sendMessage,
         toggleReaction,
         messagesList,
+        participants,
         setMessagesList,
     };
 }

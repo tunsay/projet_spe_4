@@ -28,6 +28,9 @@ export interface SessionParticipantEntry {
     userId: string;
     displayName: string;
     email: string;
+    start_position?: number | null;
+    end_position?: number | null;
+    direction?: string | null;
 }
 
 export interface ChatMessageEntry {

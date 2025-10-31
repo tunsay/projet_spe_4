@@ -297,6 +297,26 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("position-update", async ({ docId, userId, start, end, direction }, cb) => {
+      try{
+        if(!docId || !userId || !start || !end || ! direction){
+          return respond({ ok: false, reason: "invalid_informations" }, cb)
+        }
+
+        const room = `document:${docId}`;
+        if (!socket.rooms.has(room)) {
+          console.log("user", socket.id, "position-update rejected (not in room)", room);
+          return respond({ ok: false, reason: "not_joined" }, cb);
+        }
+        socket.to(room).emit("position-update", {userId, start, end, direction})
+        return respond({ ok: true }, cb);
+      } catch (error) {
+        console.error("Error in position-update:", error);
+        return respond({ ok: false, reason: "internal_error" }, cb);
+      }
+      
+    })
+
     socket.on("chat:new-message", async ({ docId, message }, cb) => {
         try {
             if (!docId || !message) {
