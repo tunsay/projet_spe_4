@@ -169,6 +169,7 @@ export default function TwoFAPage() {
         try {
             await fetchData(ENDPOINTS.VERIFY, "POST", { token });
             router.replace("/");
+            window.dispatchEvent(new Event("user:login"));
         } catch (err) {
             const fetchError = err as FetchError;
             const response = fetchError.response ?? null;

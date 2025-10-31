@@ -19,8 +19,8 @@ import { DocumentTextSection } from "../_components/DocumentTextSection";
 import { DocumentSummarySection } from "../_components/DocumentSummarySection";
 import { CollaborationSidebar } from "../_components/CollaborationSidebar";
 import { InviteCollaboratorModal } from "../_components/InviteCollaboratorModal";
+import { useSocketContext } from "@/provider/socket.tsx";
 import {
-    ChatMessageEntry,
     DocumentDetail,
     FeedbackMessage,
     Profile,
@@ -49,6 +49,7 @@ const MESSAGE_EMOJI_CHOICES = [
 ];
 
 export default function DocumentDetailPage() {
+    const { socket } = useSocketContext();
     const router = useRouter();
     const routeParams = useParams();
     const rawId = routeParams?.id;
@@ -67,7 +68,7 @@ export default function DocumentDetailPage() {
         setMessagesList,
         sendMessage,
         toggleReaction,
-    } = useRoomDocument(documentId);
+    } = useRoomDocument(socket, documentId);
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [content, setContent] = useState<string>("");

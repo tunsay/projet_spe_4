@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 
+import Link from "next/link";
+
 export default function Page() {
     return (
         // Arrière-plan global adapté au dark mode
@@ -26,12 +28,12 @@ export default function Page() {
                             Accéder aux documents
                         </Link>
                         {/* Bouton Secondaire (Gérer mon profil) */}
-                        <a
+                        <Link
                             href="/profile"
                             className="rounded-lg border border-slate-300 dark:border-gray-600 px-6 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition duration-150"
                         >
                             Gérer mon profil
-                        </a>
+                        </Link>
                     </div>
                 </section>
             </div>

@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import useSocket from "./useSocket";
+import { Socket } from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
-import { Socket } from "socket.io-client";
 import { ChatMessageEntry } from "@/types/documents";
 
 type InitialState = any;
@@ -19,10 +18,7 @@ type DocChangeEvent = {
     author?: string;
 };
 
-export default function useRoomDocument(documentId: string) {
-    // Use the shared socket for the document
-    const { socket, connect, on, off } = useSocket(documentId);
-
+export default function useRoomDocument(socket: Socket | null, documentId: string) {
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
     const [membersCount, setMembersCount] = useState<number>(0);
@@ -334,7 +330,7 @@ export default function useRoomDocument(documentId: string) {
         } else {
             // ensure the socket attempts to connect
             try {
-                connect?.();
+                socket.connect();
             } catch (e) {
                 // some socket implementations may throw; ignore here
             }
@@ -342,25 +338,25 @@ export default function useRoomDocument(documentId: string) {
 
         // Listen for events using the useSocket-provided helpers so listeners are
         // attached to the current shared socket reference.
-        on("message", handlePossibleJoinPayload);
-        on("presence", handlePresence);
-        on("doc-change", handleDocChange);
-        on("chat:new-message", handleIncomingMessage);
-        on("chat:reaction", handleIncomingReaction);
+        socket.on("message", handlePossibleJoinPayload);
+        socket.on("presence", handlePresence);
+        socket.on("doc-change", handleDocChange);
+        socket.on("chat:new-message", handleIncomingMessage);
+        socket.on("chat:reaction", handleIncomingReaction);
 
-        on("connect", handleConnect);
-        on("disconnect", handleDisconnect);
+        socket.on("connect", handleConnect);
+        socket.on("disconnect", handleDisconnect);
 
         return () => {
             mounted = false;
             try {
-                off("message", handlePossibleJoinPayload);
-                off("presence", handlePresence);
-                off("doc-change", handleDocChange);
-                off("chat:new-message", handleIncomingMessage);
-                off("chat:reaction", handleIncomingReaction);
-                off("connect", handleConnect);
-                off("disconnect", handleDisconnect);
+                socket.off("message", handlePossibleJoinPayload);
+                socket.off("presence", handlePresence);
+                socket.off("doc-change", handleDocChange);
+                socket.off("chat:new-message", handleIncomingMessage);
+                socket.off("chat:reaction", handleIncomingReaction);
+                socket.off("connect", handleConnect);
+                socket.off("disconnect", handleDisconnect);
             } catch (e) {
                 // ignore
             }
@@ -586,7 +582,6 @@ export default function useRoomDocument(documentId: string) {
     );
 
     return {
-        socket: socket as Socket | null,
         joined,
         initialState,
         setInitialState,

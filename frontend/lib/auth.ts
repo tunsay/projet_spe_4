@@ -1,5 +1,4 @@
 import { buildApiUrl } from "@/lib/api";
-
 const LOGOUT_ENDPOINT = buildApiUrl("/api/auth/logout");
 const SOCKET_TOKEN_KEY = "collaboratif_token";
 
@@ -44,6 +43,7 @@ export const performLogout = async (router?: RouterLike) => {
             method: "POST",
             credentials: "include",
         });
+        window.dispatchEvent(new Event("user:logout"));
     } catch (error) {
         console.error("Erreur lors de la déconnexion automatique:", error);
     } finally {
