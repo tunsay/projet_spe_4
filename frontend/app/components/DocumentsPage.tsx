@@ -239,56 +239,7 @@ export default function DocumentsPage() {
         if (doc.type === "folder") {
             setCurrentFolderId(doc.id);
         } else {
-            try {
-                const response = await fetch(
-                    buildApiUrl(`/api/sessions/${doc.id}`),
-                    {
-                        method: "POST",
-                        credentials: "include",
-                        headers: withUserHeaders({
-                            "Content-Type": "application/json",
-                        }),
-                    }
-                );
-
-                if (await handleUnauthorized(response, router)) {
-                    return;
-                }
-
-                if (!response.ok) {
-                    let errorMessage = `Échec de la création de la session: ${response.status}`;
-                    try {
-                        const body = await response.json();
-                        if (
-                            body &&
-                            typeof body === "object" &&
-                            "message" in body &&
-                            typeof (body as { message: unknown }).message ===
-                                "string"
-                        ) {
-                            errorMessage = (body as { message: string })
-                                .message;
-                        }
-                    } catch {
-                        // ignore JSON errors
-                    }
-                    throw new Error(errorMessage);
-                }
-
-                router.push(`/documents/${doc.id}`);
-            } catch (error) {
-                console.error(
-                    "Erreur lors de la création du document :",
-                    error
-                );
-                handleNotification(
-                    error instanceof Error
-                        ? error.message
-                        : "Erreur inattendue lors de la création du document.",
-                    true
-                );
-                return;
-            }
+            router.push(`/documents/${doc.id}`);
         }
     };
 

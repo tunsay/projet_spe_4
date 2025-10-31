@@ -152,7 +152,7 @@ const setParticipantByDocumentId = async (req, res) => {
 const deleteParticipantByDocumentId = async (req, res) => {
     const { id } = req.params;
     const userId = req.userId;
-
+    console.log("Suppression du participant:", userId, "dans le document:", id);
     try {
         const document = await Document.findByPk(id);
         if (!document) {
@@ -194,8 +194,10 @@ const deleteParticipantByDocumentId = async (req, res) => {
         }
 
         const sessionParticipant = await SessionParticipant.findOne({
-            session_id: collaborationSession.id,
-            user_id: userId,
+            where: {
+                session_id: collaborationSession.id,
+                user_id: userId,
+            },
         });
 
         if (!sessionParticipant) {

@@ -3,7 +3,7 @@ import { Socket } from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
 import { ChatMessageEntry } from "@/types/documents";
 import { SessionParticipantEntry } from "@/types/documents";
-
+import { fetchParticipants } from "@/api/participant";
 type InitialState = any;
 
 type PresenceEvent = {
@@ -288,11 +288,16 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             }
         };
 
-        const handlePresence = (payload: PresenceEvent) => {
+        const handlePresence = async (payload: PresenceEvent) => {
             if (!mounted) return;
             setLastPresence(payload);
             if (typeof payload.membersCount === "number")
                 setMembersCount(payload.membersCount);
+            await fetchParticipants(documentId as string).then(data => {
+                if (data) {
+                    setParticipants(data);
+                }
+            })
         };
 
         const handleDocChange = (payload: DocChangeEvent) => {
@@ -407,19 +412,19 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             });
         },
         [socket, documentId]
-    ); 
+    );
 
-    const handlePositionUpdate = (docId : string, userId: string, start : number, end : number, direction : string) =>{
+    const handlePositionUpdate = (docId: string, userId: string, start: number, end: number, direction: string) => {
         if (docId !== documentId) {
             return;
         }
-        const participantsUpdated = participants.map(participant =>{
-            if(participant.userId === userId) {
+        const participantsUpdated = participants.map(participant => {
+            if (participant.userId === userId) {
                 participant.start_position = start;
                 participant.end_position = end;
                 participant.direction = direction;
                 return participant;
-            }else{
+            } else {
                 return participant;
             }
         })
@@ -427,18 +432,18 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     }
 
     const sendNewPosition = useCallback(
-        (docId: string, userId: string, start : number, end : number, direction : string): Promise<SessionParticipantEntry[]> => {
+        (docId: string, userId: string, start: number, end: number, direction: string): Promise<SessionParticipantEntry[]> => {
             if (!socket) return Promise.reject(new Error("no-socket"));
 
             return new Promise<SessionParticipantEntry[]>((resolve, reject) => {
                 try {
-                    const participantsUpdated = participants.map(participant =>{
-                        if(participant.userId === userId) {
+                    const participantsUpdated = participants.map(participant => {
+                        if (participant.userId === userId) {
                             participant.start_position = start;
                             participant.end_position = end;
                             participant.direction = direction;
                             return participant;
-                        }else{
+                        } else {
                             return participant;
                         }
                     })
@@ -677,6 +682,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         toggleReaction,
         messagesList,
         participants,
+        setParticipants,
         setMessagesList,
     };
 }

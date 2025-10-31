@@ -20,6 +20,7 @@ import { DocumentSummarySection } from "../_components/DocumentSummarySection";
 import { CollaborationSidebar } from "../_components/CollaborationSidebar";
 import { InviteCollaboratorModal } from "../_components/InviteCollaboratorModal";
 import { useSocketContext } from "@/provider/socket";
+import { fetchParticipants as fetchParticipantsService } from "@/api/participant";
 import {
     DocumentDetail,
     FeedbackMessage,
@@ -61,6 +62,8 @@ export default function DocumentDetailPage() {
             : "";
 
     const {
+        participants,
+        setParticipants,
         joined: isRealtimeReady,
         initialState: doc,
         setInitialState: setDoc,
@@ -79,9 +82,6 @@ export default function DocumentDetailPage() {
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    const [participants, setParticipants] = useState<SessionParticipantEntry[]>(
-        []
-    );
     const [participantsLoading, setParticipantsLoading] = useState(false);
     const [participantsError, setParticipantsError] = useState<string | null>(
         null
@@ -350,111 +350,9 @@ export default function DocumentDetailPage() {
         setParticipantsError(null);
 
         try {
-            const response = await fetch(
-                buildApiUrl(`/api/sessions/${documentId}`),
-                {
-                    credentials: "include",
-                }
-            );
+            const newParticipantList = await fetchParticipantsService(documentId);
 
-            if (await handleUnauthorized(response, router)) {
-                return;
-            }
-
-            let payload: unknown = null;
-            try {
-                payload = await response.json();
-            } catch {
-                payload = null;
-            }
-
-            if (!response.ok) {
-                throw new Error(
-                    normalizeErrorMessage(
-                        payload,
-                        "Impossible de récupérer les participants."
-                    )
-                );
-            }
-
-            const rawList = Array.isArray(
-                (payload as { participants?: unknown }).participants
-            )
-                ? ((payload as { participants: unknown[] })
-                      .participants as unknown[])
-                : [];
-
-            const normalized: SessionParticipantEntry[] = rawList.map(
-                (item, index) => {
-                    if (!item || typeof item !== "object") {
-                        const fallbackId = `participant-${index}`;
-                        return {
-                            userId: fallbackId,
-                            displayName: fallbackId,
-                            email: "",
-                        };
-                    }
-
-                    const participant = item as Record<string, unknown>;
-                    const rawUser =
-                        (participant.user as
-                            | Record<string, unknown>
-                            | undefined) ??
-                        (participant.User as
-                            | Record<string, unknown>
-                            | undefined);
-
-                    const email =
-                        (typeof participant.email === "string" &&
-                            participant.email) ||
-                        (rawUser && typeof rawUser.email === "string"
-                            ? rawUser.email
-                            : "") ||
-                        "";
-
-                    const userId =
-                        (typeof participant.user_id === "string" &&
-                            participant.user_id) ||
-                        (typeof participant.userId === "string" &&
-                            participant.userId) ||
-                        (rawUser &&
-                            typeof rawUser.id === "string" &&
-                            rawUser.id) ||
-                        (rawUser &&
-                            typeof rawUser.user_id === "string" &&
-                            rawUser.user_id) ||
-                        email ||
-                        `participant-${index}`;
-
-                    const nameFromRecord =
-                        (rawUser &&
-                            typeof rawUser.display_name === "string" &&
-                            rawUser.display_name) ||
-                        (rawUser &&
-                            typeof rawUser.displayName === "string" &&
-                            rawUser.displayName) ||
-                        (rawUser &&
-                            typeof rawUser.name === "string" &&
-                            rawUser.name) ||
-                        (typeof participant.display_name === "string" &&
-                            participant.display_name) ||
-                        (typeof participant.displayName === "string" &&
-                            participant.displayName) ||
-                        (typeof participant.name === "string" &&
-                            participant.name) ||
-                        null;
-
-                    const displayName = nameFromRecord || email || userId;
-
-                    return {
-                        userId,
-                        displayName,
-                        email,
-                    };
-                }
-            );
-
-            setParticipants(normalized);
+            setParticipants(newParticipantList);
         } catch (error) {
             console.error("Erreur participants:", error);
             setParticipantsError(
@@ -719,7 +617,6 @@ export default function DocumentDetailPage() {
                 });
                 setInviteEmail("");
                 setInvitePermission("edit");
-                await fetchParticipants();
             } catch (error) {
                 console.error("Erreur invitation:", error);
                 setInviteFeedback({
@@ -739,7 +636,6 @@ export default function DocumentDetailPage() {
             invitePermission,
             withUserHeaders,
             router,
-            fetchParticipants,
         ]
     );
 

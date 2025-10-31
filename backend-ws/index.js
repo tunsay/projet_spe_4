@@ -5,6 +5,10 @@ import {
     canAccessDocument,
     loadDocumentSnapshot,
 } from "./services/documents.js";
+import {
+    openSession,
+    closeSession
+} from "./services/sessions.js";
 import { persistChatMessage } from "./services/messages.js";
 dotenv.config();
 
@@ -156,6 +160,7 @@ io.on("connection", (socket) => {
                     cb
                 );
 
+                await openSession(socket.user, docId);
                 // Notifier les autres membres
                 socket.to(room).emit("presence", {
                     type: "joined",
@@ -215,6 +220,8 @@ io.on("connection", (socket) => {
             const clients = io.sockets.adapter.rooms.get(room);
             const membersCount = clients ? clients.size : 0;
 
+            await closeSession(socket.user, docId);
+
             // Notify other members that this socket left
             socket.to(room).emit("presence", {
                 type: "left",
@@ -222,7 +229,6 @@ io.on("connection", (socket) => {
                 socketId: socket.id,
                 membersCount,
             });
-
             console.log(
                 "user",
                 socket.id,
