@@ -26,8 +26,12 @@ export default function useRoomDocument(documentId: string) {
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
     const [membersCount, setMembersCount] = useState<number>(0);
-    const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(null);
-    const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(null);
+    const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(
+        null
+    );
+    const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(
+        null
+    );
     const [joinError, setJoinError] = useState<string | null>(null);
     const [messagesList, setMessagesList] = useState<ChatMessageEntry[]>([]);
 
@@ -47,7 +51,11 @@ export default function useRoomDocument(documentId: string) {
             if (payload.ok === true) {
                 setJoined(true);
                 setInitialState(payload.initialState ?? null);
-                setMembersCount(typeof payload.membersCount === "number" ? payload.membersCount : membersCount);
+                setMembersCount(
+                    typeof payload.membersCount === "number"
+                        ? payload.membersCount
+                        : membersCount
+                );
                 setJoinError(null);
             } else if (payload.ok === false) {
                 setJoinError(payload.reason || "unknown_reason");
@@ -57,7 +65,8 @@ export default function useRoomDocument(documentId: string) {
         const handlePresence = (payload: PresenceEvent) => {
             if (!mounted) return;
             setLastPresence(payload);
-            if (typeof payload.membersCount === "number") setMembersCount(payload.membersCount);
+            if (typeof payload.membersCount === "number")
+                setMembersCount(payload.membersCount);
         };
 
         const handleDocChange = (payload: DocChangeEvent) => {
@@ -70,12 +79,15 @@ export default function useRoomDocument(documentId: string) {
         // connected when this hook is used on a page.
         const tryJoin = () => {
             try {
-                socket.emit("join-document", { docId: documentId }, (response: any) => handlePossibleJoinPayload(response));
+                socket.emit(
+                    "join-document",
+                    { docId: documentId },
+                    (response: any) => handlePossibleJoinPayload(response)
+                );
             } catch (e) {
                 console.error("Error emitting join-document", e);
             }
         };
-
 
         // Rejoin on every successful connect (initial or reconnection)
         const handleConnect = () => {
@@ -130,13 +142,20 @@ export default function useRoomDocument(documentId: string) {
             if (!socket) return Promise.reject(new Error("no-socket"));
             return new Promise<void>((resolve, reject) => {
                 try {
-                    socket.emit("doc-change", { docId: documentId, delta }, (ack: any) => {
-                        // server may ack
-                        if (ack && ack.ok === true) return resolve();
-                        if (ack && ack.ok === false) return reject(new Error(ack.reason || "server_rejected"));
-                        // If no ack, resolve optimistically
-                        return resolve();
-                    });
+                    socket.emit(
+                        "doc-change",
+                        { docId: documentId, delta },
+                        (ack: any) => {
+                            // server may ack
+                            if (ack && ack.ok === true) return resolve();
+                            if (ack && ack.ok === false)
+                                return reject(
+                                    new Error(ack.reason || "server_rejected")
+                                );
+                            // If no ack, resolve optimistically
+                            return resolve();
+                        }
+                    );
                 } catch (e) {
                     reject(e);
                 }
@@ -146,11 +165,7 @@ export default function useRoomDocument(documentId: string) {
     );
 
     const handleIncomingMessage = (payload: unknown) => {
-        if (
-            !payload ||
-            typeof payload !== "object" ||
-            !("docId" in payload)
-        ) {
+        if (!payload || typeof payload !== "object" || !("docId" in payload)) {
             return;
         }
 
@@ -168,13 +183,19 @@ export default function useRoomDocument(documentId: string) {
     };
 
     const sendMessage = useCallback(
-        (outboundMessage: any, fallbackId: string): Promise<ChatMessageEntry> => {
+        (
+            outboundMessage: any,
+            fallbackId: string
+        ): Promise<ChatMessageEntry> => {
             if (!socket) return Promise.reject(new Error("no-socket"));
 
             return new Promise<ChatMessageEntry>((resolve, reject) => {
                 try {
                     // Optimistically add the message to the list
-                    const optimistic = normalizeMessageRecord(outboundMessage, fallbackId);
+                    const optimistic = normalizeMessageRecord(
+                        outboundMessage,
+                        fallbackId
+                    );
                     setMessagesList((cur) => upsertMessage(cur, optimistic));
 
                     socket.emit(
@@ -182,13 +203,19 @@ export default function useRoomDocument(documentId: string) {
                         { docId: documentId, message: outboundMessage },
                         (ack: any) => {
                             if (ack && ack.ok === true) {
-                                const normalized = normalizeMessageRecord(ack.message ?? outboundMessage);
-                                setMessagesList((cur) => upsertMessage(cur, normalized));
+                                const normalized = normalizeMessageRecord(
+                                    ack.message ?? outboundMessage
+                                );
+                                setMessagesList((cur) =>
+                                    upsertMessage(cur, normalized)
+                                );
                                 return resolve(normalized);
                             }
 
                             if (ack && ack.ok === false) {
-                                return reject(new Error(ack.reason || "server_rejected"));
+                                return reject(
+                                    new Error(ack.reason || "server_rejected")
+                                );
                             }
 
                             // No ack provided by server — resolve with optimistic message
@@ -216,6 +243,6 @@ export default function useRoomDocument(documentId: string) {
         handleIncomingMessage,
         sendMessage,
         messagesList,
-        setMessagesList
+        setMessagesList,
     };
 }

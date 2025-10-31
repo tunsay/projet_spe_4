@@ -27,7 +27,11 @@ import {
     SaveState,
     SessionParticipantEntry,
 } from "@/types/documents";
-import { normalizeMessageRecord, sortMessagesByDate, normalizeErrorMessage } from "@/utils/message";
+import {
+    normalizeMessageRecord,
+    sortMessagesByDate,
+    normalizeErrorMessage,
+} from "@/utils/message";
 
 export default function DocumentDetailPage() {
     const router = useRouter();
@@ -70,8 +74,9 @@ export default function DocumentDetailPage() {
     const [newMessage, setNewMessage] = useState("");
     const [sendingMessage, setSendingMessage] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
-    const [invitePermission, setInvitePermission] =
-        useState<"read" | "edit" | "owner">("edit");
+    const [invitePermission, setInvitePermission] = useState<
+        "read" | "edit" | "owner"
+    >("edit");
     const [inviteFeedback, setInviteFeedback] =
         useState<FeedbackMessage | null>(null);
     const [inviteLoading, setInviteLoading] = useState(false);
@@ -256,13 +261,14 @@ export default function DocumentDetailPage() {
         } finally {
             setLoading(false);
         }
-    }, [documentId, router]);
+    }, [documentId, router, setDoc]);
 
     const handleSave = useCallback(
         async (nextContent?: string) => {
             if (!doc || doc.type !== "text") return;
 
-            const payload = typeof nextContent === "string" ? nextContent : content;
+            const payload =
+                typeof nextContent === "string" ? nextContent : content;
             if (payload === persistedContent) return;
 
             setSaveState("saving");
@@ -357,7 +363,8 @@ export default function DocumentDetailPage() {
             const rawList = Array.isArray(
                 (payload as { participants?: unknown }).participants
             )
-                ? ((payload as { participants: unknown[] }).participants as unknown[])
+                ? ((payload as { participants: unknown[] })
+                      .participants as unknown[])
                 : [];
 
             const normalized: SessionParticipantEntry[] = rawList.map(
@@ -373,20 +380,29 @@ export default function DocumentDetailPage() {
 
                     const participant = item as Record<string, unknown>;
                     const rawUser =
-                        (participant.user as Record<string, unknown> | undefined) ??
-                        (participant.User as Record<string, unknown> | undefined);
+                        (participant.user as
+                            | Record<string, unknown>
+                            | undefined) ??
+                        (participant.User as
+                            | Record<string, unknown>
+                            | undefined);
 
                     const email =
-                        (typeof participant.email === "string" && participant.email) ||
+                        (typeof participant.email === "string" &&
+                            participant.email) ||
                         (rawUser && typeof rawUser.email === "string"
                             ? rawUser.email
                             : "") ||
                         "";
 
                     const userId =
-                        (typeof participant.user_id === "string" && participant.user_id) ||
-                        (typeof participant.userId === "string" && participant.userId) ||
-                        (rawUser && typeof rawUser.id === "string" && rawUser.id) ||
+                        (typeof participant.user_id === "string" &&
+                            participant.user_id) ||
+                        (typeof participant.userId === "string" &&
+                            participant.userId) ||
+                        (rawUser &&
+                            typeof rawUser.id === "string" &&
+                            rawUser.id) ||
                         (rawUser &&
                             typeof rawUser.user_id === "string" &&
                             rawUser.user_id) ||
@@ -400,12 +416,15 @@ export default function DocumentDetailPage() {
                         (rawUser &&
                             typeof rawUser.displayName === "string" &&
                             rawUser.displayName) ||
-                        (rawUser && typeof rawUser.name === "string" && rawUser.name) ||
+                        (rawUser &&
+                            typeof rawUser.name === "string" &&
+                            rawUser.name) ||
                         (typeof participant.display_name === "string" &&
                             participant.display_name) ||
                         (typeof participant.displayName === "string" &&
                             participant.displayName) ||
-                        (typeof participant.name === "string" && participant.name) ||
+                        (typeof participant.name === "string" &&
+                            participant.name) ||
                         null;
 
                     const displayName = nameFromRecord || email || userId;
@@ -486,7 +505,7 @@ export default function DocumentDetailPage() {
         } finally {
             setMessagesLoading(false);
         }
-    }, [documentId, router]);
+    }, [documentId, router, setMessagesList]);
 
     useEffect(() => {
         if (!documentId) {
@@ -553,46 +572,6 @@ export default function DocumentDetailPage() {
             setSendingMessage(true);
 
             try {
-                const response = await fetch(
-                    buildApiUrl(`/api/messages/${documentId}`),
-                    {
-                        method: "POST",
-                        credentials: "include",
-                        headers: withUserHeaders({
-                            "Content-Type": "application/json",
-                        }),
-                        body: JSON.stringify({ content: trimmed }),
-                    }
-                );
-
-                if (await handleUnauthorized(response, router)) {
-                    return;
-                }
-
-                let payload: unknown = null;
-                try {
-                    payload = await response.json();
-                } catch {
-                    payload = null;
-                }
-
-                if (!response.ok) {
-                    throw new Error(
-                        normalizeErrorMessage(
-                            payload,
-                            "Impossible d'envoyer le message."
-                        )
-                    );
-                }
-
-                const messagePayload =
-                    payload &&
-                    typeof payload === "object" &&
-                    payload !== null &&
-                    "message" in payload
-                        ? (payload as { message?: unknown }).message
-                        : null;
-
                 const fallbackAuthor = profile
                     ? {
                           id: profile.id,
@@ -608,8 +587,8 @@ export default function DocumentDetailPage() {
                           display_name: null,
                       };
 
-                const normalizedMessage = normalizeMessageRecord(
-                    messagePayload ?? {
+                const optimisticMessage = normalizeMessageRecord(
+                    {
                         id: Date.now(),
                         content: trimmed,
                         user_id: profile?.id ?? "",
@@ -618,15 +597,14 @@ export default function DocumentDetailPage() {
                         email: fallbackAuthor.email,
                         display_name: fallbackAuthor.display_name,
                     },
-                    messagePayload ? undefined : `local-${Date.now()}`
+                    `local-${Date.now()}`
                 );
 
                 setNewMessage("");
-                sendMessage(normalizedMessage, normalizedMessage.id.toString());
-
-                if (!messagePayload) {
-                    await fetchMessages();
-                }
+                await sendMessage(
+                    optimisticMessage,
+                    optimisticMessage.id.toString()
+                );
             } catch (error) {
                 console.error("Erreur message:", error);
                 setMessagesError(
@@ -641,13 +619,10 @@ export default function DocumentDetailPage() {
         [
             documentId,
             newMessage,
-            withUserHeaders,
-            router,
             profile?.id,
             profile?.name,
             profile?.email,
-            fetchMessages,
-            sendMessage
+            sendMessage,
         ]
     );
 
@@ -716,13 +691,14 @@ export default function DocumentDetailPage() {
                 setInviteFeedback({
                     type: "success",
                     text:
-                        (payload &&
-                            typeof payload === "object" &&
-                            payload !== null &&
-                            "message" in payload &&
-                            typeof (payload as { message?: unknown }).message === "string"
+                        payload &&
+                        typeof payload === "object" &&
+                        payload !== null &&
+                        "message" in payload &&
+                        typeof (payload as { message?: unknown }).message ===
+                            "string"
                             ? (payload as { message: string }).message
-                            : "Invitation envoyée avec succès."),
+                            : "Invitation envoyée avec succès.",
                 });
                 setInviteEmail("");
                 setInvitePermission("edit");
@@ -793,7 +769,8 @@ export default function DocumentDetailPage() {
         if (doc?.owner_id) {
             const ownerName =
                 (ownerDisplayName && ownerDisplayName.trim()) ||
-                (participants.find((item) => item.userId === doc.owner_id)?.email ??
+                (participants.find((item) => item.userId === doc.owner_id)
+                    ?.email ??
                     doc.owner_id);
             map.set(doc.owner_id, ownerName);
         }
@@ -807,19 +784,22 @@ export default function DocumentDetailPage() {
         }
 
         return map;
-    }, [participants, doc?.owner_id, ownerDisplayName, profile?.id, profile?.name, profile?.email]);
+    }, [
+        participants,
+        doc?.owner_id,
+        ownerDisplayName,
+        profile?.id,
+        profile?.name,
+        profile?.email,
+    ]);
 
     const resolveAuthorName = useCallback(
         (userId: string, fallbackName?: string | null) => {
-            const fallback =
-                (fallbackName && fallbackName.trim()) ||
-                undefined;
+            const fallback = (fallbackName && fallbackName.trim()) || undefined;
 
             if (!userId) {
                 return (
-                    fallback ||
-                    (profile?.email && profile.email.trim()) ||
-                    ""
+                    fallback || (profile?.email && profile.email.trim()) || ""
                 );
             }
 
@@ -846,7 +826,14 @@ export default function DocumentDetailPage() {
 
             return fallback || userId;
         },
-        [messageAuthorLookup, profile?.id, profile?.name, profile?.email, doc?.owner_id, ownerDisplayName]
+        [
+            messageAuthorLookup,
+            profile?.id,
+            profile?.name,
+            profile?.email,
+            doc?.owner_id,
+            ownerDisplayName,
+        ]
     );
 
     if (!profile || !isRealtimeReady) {
@@ -890,7 +877,9 @@ export default function DocumentDetailPage() {
     } else if (!doc) {
         mainContent = (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-6 text-sm text-amber-800 shadow-sm dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                <p className="font-semibold">Document introuvable ou inaccessible.</p>
+                <p className="font-semibold">
+                    Document introuvable ou inaccessible.
+                </p>
                 <p className="mt-1">
                     {message?.text ??
                         "Veuillez vérifier l'identifiant et vos droits d'accès."}

@@ -95,7 +95,8 @@ export default function DocumentsPage() {
     const [newContent, setNewContent] = useState("");
     const [fileToUpload, setFileToUpload] = useState<File | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const [selectedDocForDetails, setSelectedDocForDetails] = useState<DocumentNode | null>(null);
+    const [selectedDocForDetails, setSelectedDocForDetails] =
+        useState<DocumentNode | null>(null);
 
     const documentIndex = useMemo(() => indexTree(documents), [documents]);
 
@@ -126,18 +127,15 @@ export default function DocumentsPage() {
         setTimeout(() => setMessage(null), 5000);
     };
 
-    const getDownloadUrl = useCallback(
-        (doc: DocumentNode) => {
-            if (doc.type === "file") {
-                return buildApiUrl(`/api/documents/file/${doc.id}/download`);
-            }
-            if (doc.type === "text") {
-                return buildApiUrl(`/api/documents/${doc.id}/download`);
-            }
-            return null;
-        },
-        []
-    );
+    const getDownloadUrl = useCallback((doc: DocumentNode) => {
+        if (doc.type === "file") {
+            return buildApiUrl(`/api/documents/file/${doc.id}/download`);
+        }
+        if (doc.type === "text") {
+            return buildApiUrl(`/api/documents/${doc.id}/download`);
+        }
+        return null;
+    }, []);
 
     const fetchProfile = useCallback(async () => {
         try {
@@ -157,7 +155,8 @@ export default function DocumentsPage() {
                         body &&
                         typeof body === "object" &&
                         "message" in body &&
-                        typeof (body as { message: unknown }).message === "string"
+                        typeof (body as { message: unknown }).message ===
+                            "string"
                     ) {
                         errorMessage = (body as { message: string }).message;
                     }
@@ -193,8 +192,7 @@ export default function DocumentsPage() {
                 return;
             }
             if (!response.ok) {
-                let errorMessage =
-                    `Erreur HTTP ${response.status} lors du chargement des documents.`;
+                let errorMessage = `Erreur HTTP ${response.status} lors du chargement des documents.`;
                 try {
                     const body = await response.json();
                     if (
@@ -237,11 +235,60 @@ export default function DocumentsPage() {
         bootstrap();
     }, [fetchProfile, fetchDocuments]);
 
-    const handleOpen = (doc: DocumentNode) => {
+    const handleOpen = async (doc: DocumentNode) => {
         if (doc.type === "folder") {
             setCurrentFolderId(doc.id);
         } else {
-            router.push(`/documents/${doc.id}`);
+            try {
+                const response = await fetch(
+                    buildApiUrl(`/api/sessions/${doc.id}`),
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: withUserHeaders({
+                            "Content-Type": "application/json",
+                        }),
+                    }
+                );
+
+                if (await handleUnauthorized(response, router)) {
+                    return;
+                }
+
+                if (!response.ok) {
+                    let errorMessage = `Échec de la création de la session: ${response.status}`;
+                    try {
+                        const body = await response.json();
+                        if (
+                            body &&
+                            typeof body === "object" &&
+                            "message" in body &&
+                            typeof (body as { message: unknown }).message ===
+                                "string"
+                        ) {
+                            errorMessage = (body as { message: string })
+                                .message;
+                        }
+                    } catch {
+                        // ignore JSON errors
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                router.push(`/documents/${doc.id}`);
+            } catch (error) {
+                console.error(
+                    "Erreur lors de la création du document :",
+                    error
+                );
+                handleNotification(
+                    error instanceof Error
+                        ? error.message
+                        : "Erreur inattendue lors de la création du document.",
+                    true
+                );
+                return;
+            }
         }
     };
 
@@ -264,23 +311,19 @@ export default function DocumentsPage() {
         setCreating(true);
         setMessage(null);
         try {
-            const response = await fetch(
-                buildApiUrl("/api/documents"),
-                {
-                    method: "POST",
-                    credentials: "include",
-                    headers: withUserHeaders({
-                        "Content-Type": "application/json",
-                    }),
-                    body: JSON.stringify({
-                        name: trimmedName,
-                        type: creationMode,
-                        parent_id: currentFolderId,
-                        content:
-                            creationMode === "text" ? newContent : undefined,
-                    }),
-                }
-            );
+            const response = await fetch(buildApiUrl("/api/documents"), {
+                method: "POST",
+                credentials: "include",
+                headers: withUserHeaders({
+                    "Content-Type": "application/json",
+                }),
+                body: JSON.stringify({
+                    name: trimmedName,
+                    type: creationMode,
+                    parent_id: currentFolderId,
+                    content: creationMode === "text" ? newContent : undefined,
+                }),
+            });
 
             if (await handleUnauthorized(response, router)) {
                 return;
@@ -294,7 +337,8 @@ export default function DocumentsPage() {
                         body &&
                         typeof body === "object" &&
                         "message" in body &&
-                        typeof (body as { message: unknown }).message === "string"
+                        typeof (body as { message: unknown }).message ===
+                            "string"
                     ) {
                         errorMessage = (body as { message: string }).message;
                     }
@@ -336,15 +380,12 @@ export default function DocumentsPage() {
             formData.append("file", fileToUpload);
             formData.append("parent_id", currentFolderId || "");
 
-            const response = await fetch(
-                buildApiUrl("/api/documents/file"),
-                {
-                    method: "POST",
-                    credentials: "include",
-                    headers: withUserHeaders(),
-                    body: formData,
-                }
-            );
+            const response = await fetch(buildApiUrl("/api/documents/file"), {
+                method: "POST",
+                credentials: "include",
+                headers: withUserHeaders(),
+                body: formData,
+            });
 
             if (await handleUnauthorized(response, router)) {
                 return;
@@ -358,7 +399,8 @@ export default function DocumentsPage() {
                         body &&
                         typeof body === "object" &&
                         "message" in body &&
-                        typeof (body as { message: unknown }).message === "string"
+                        typeof (body as { message: unknown }).message ===
+                            "string"
                     ) {
                         errorMessage = (body as { message: string }).message;
                     }
@@ -441,7 +483,8 @@ export default function DocumentsPage() {
                         body &&
                         typeof body === "object" &&
                         "message" in body &&
-                        typeof (body as { message: unknown }).message === "string"
+                        typeof (body as { message: unknown }).message ===
+                            "string"
                     ) {
                         errorMessage = (body as { message: string }).message;
                     }
@@ -492,7 +535,8 @@ export default function DocumentsPage() {
                         body &&
                         typeof body === "object" &&
                         "message" in body &&
-                        typeof (body as { message: unknown }).message === "string"
+                        typeof (body as { message: unknown }).message ===
+                            "string"
                     ) {
                         errorMessage = (body as { message: string }).message;
                     }
@@ -525,7 +569,8 @@ export default function DocumentsPage() {
                                 Mes Documents
                             </h1>
                             <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">
-                                Gérez vos dossiers, vos documents textuels et collaborez avec votre équipe.
+                                Gérez vos dossiers, vos documents textuels et
+                                collaborez avec votre équipe.
                             </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -718,7 +763,8 @@ export default function DocumentsPage() {
                                             />
                                             {fileToUpload && (
                                                 <p className="mt-2 text-slate-500 dark:text-slate-400 text-xs">
-                                                    Fichier prêt : **{fileToUpload.name}** (
+                                                    Fichier prêt : **
+                                                    {fileToUpload.name}** (
                                                     {Math.round(
                                                         fileToUpload.size / 1024
                                                     )}{" "}
@@ -791,16 +837,23 @@ export default function DocumentsPage() {
                                 </div>
                             ) : !sortedChildren.length ? (
                                 <div className="bg-slate-50 dark:bg-gray-900/40 mt-6 p-10 border border-slate-200 dark:border-gray-700 border-dashed rounded-lg text-slate-500 dark:text-slate-400 text-sm text-center">
-                                    Ce dossier est vide. Créez un document ou importez un fichier pour commencer.
+                                    Ce dossier est vide. Créez un document ou
+                                    importez un fichier pour commencer.
                                 </div>
                             ) : (
                                 <div className="mt-6 border border-slate-200 dark:border-gray-800 rounded-lg overflow-hidden">
                                     <table className="divide-y divide-slate-200 dark:divide-gray-700 min-w-full">
                                         <thead className="bg-slate-100 dark:bg-gray-800 text-slate-500 dark:text-slate-300 text-xs text-left uppercase tracking-wide">
                                             <tr>
-                                                <th className="px-4 py-3">Nom</th>
-                                                <th className="hidden md:table-cell px-4 py-3">Type</th>
-                                                <th className="hidden lg:table-cell px-4 py-3">Créé le</th>
+                                                <th className="px-4 py-3">
+                                                    Nom
+                                                </th>
+                                                <th className="hidden md:table-cell px-4 py-3">
+                                                    Type
+                                                </th>
+                                                <th className="hidden lg:table-cell px-4 py-3">
+                                                    Créé le
+                                                </th>
                                                 <th className="px-4 py-3 text-right">
                                                     Actions
                                                 </th>
@@ -808,7 +861,8 @@ export default function DocumentsPage() {
                                         </thead>
                                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-slate-100 dark:divide-gray-700">
                                             {sortedChildren.map((doc) => {
-                                                const downloadHref = getDownloadUrl(doc);
+                                                const downloadHref =
+                                                    getDownloadUrl(doc);
                                                 return (
                                                     <tr
                                                         key={doc.id}
@@ -816,11 +870,20 @@ export default function DocumentsPage() {
                                                     >
                                                         <td className="px-4 py-3">
                                                             <button
-                                                                onClick={() => handleOpen(doc)}
+                                                                onClick={() =>
+                                                                    handleOpen(
+                                                                        doc
+                                                                    )
+                                                                }
                                                                 className="flex items-center gap-3 text-slate-700 dark:text-slate-200 text-left"
                                                             >
                                                                 <span className="text-xl">
-                                                                    {TYPE_ICON[doc.type]}
+                                                                    {
+                                                                        TYPE_ICON[
+                                                                            doc
+                                                                                .type
+                                                                        ]
+                                                                    }
                                                                 </span>
                                                                 <span className="font-medium hover:text-indigo-600 dark:hover:text-indigo-400">
                                                                     {doc.name}
@@ -828,22 +891,36 @@ export default function DocumentsPage() {
                                                             </button>
                                                         </td>
                                                         <td className="hidden md:table-cell px-4 py-3 text-slate-500 dark:text-slate-400">
-                                                            {TYPE_LABEL[doc.type]}
+                                                            {
+                                                                TYPE_LABEL[
+                                                                    doc.type
+                                                                ]
+                                                            }
                                                         </td>
                                                         <td className="hidden lg:table-cell px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">
-                                                            {new Date(doc.created_at).toLocaleString('fr-FR')}
+                                                            {new Date(
+                                                                doc.created_at
+                                                            ).toLocaleString(
+                                                                "fr-FR"
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <div className="flex justify-end gap-2 text-xs">
                                                                 <button
                                                                     className="hover:bg-slate-100 dark:hover:bg-gray-700 px-2 py-1 border border-slate-300 dark:border-gray-600 rounded-md text-slate-600 dark:text-slate-300 transition duration-150"
-                                                                    onClick={() => setSelectedDocForDetails(doc)}
+                                                                    onClick={() =>
+                                                                        setSelectedDocForDetails(
+                                                                            doc
+                                                                        )
+                                                                    }
                                                                 >
                                                                     Détails
                                                                 </button>
                                                                 {downloadHref && (
                                                                     <Link
-                                                                        href={downloadHref}
+                                                                        href={
+                                                                            downloadHref
+                                                                        }
                                                                         className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-md text-blue-600 dark:text-blue-300 transition duration-150"
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
@@ -853,13 +930,21 @@ export default function DocumentsPage() {
                                                                 )}
                                                                 <button
                                                                     className="hover:bg-slate-100 dark:hover:bg-gray-700 px-2 py-1 border border-slate-300 dark:border-gray-600 rounded-md text-slate-600 dark:text-slate-300 transition duration-150"
-                                                                    onClick={() => handleRename(doc)}
+                                                                    onClick={() =>
+                                                                        handleRename(
+                                                                            doc
+                                                                        )
+                                                                    }
                                                                 >
                                                                     Renommer
                                                                 </button>
                                                                 <button
                                                                     className="bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900 px-2 py-1 border border-red-300 dark:border-red-700 rounded-md text-red-600 dark:text-red-300 transition duration-150"
-                                                                    onClick={() => handleDelete(doc)}
+                                                                    onClick={() =>
+                                                                        handleDelete(
+                                                                            doc
+                                                                        )
+                                                                    }
                                                                 >
                                                                     Supprimer
                                                                 </button>
@@ -897,7 +982,7 @@ export default function DocumentsPage() {
                                 <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
                                     Nom
                                 </span>
-                                <p className="mt-1 text-slate-600 dark:text-slate-300 text-sm break-words">
+                                <p className="mt-1 text-slate-600 dark:text-slate-300 text-sm wrap-break-word">
                                     {selectedDocForDetails.name}
                                 </p>
                             </div>
@@ -924,7 +1009,9 @@ export default function DocumentsPage() {
                                     Créé le
                                 </span>
                                 <p className="mt-1 text-slate-600 dark:text-slate-300 text-sm">
-                                    {new Date(selectedDocForDetails.created_at).toLocaleString('fr-FR')}
+                                    {new Date(
+                                        selectedDocForDetails.created_at
+                                    ).toLocaleString("fr-FR")}
                                 </p>
                             </div>
                             {selectedDocForDetails.mime_type && (
@@ -961,7 +1048,6 @@ export default function DocumentsPage() {
             )}
         </div>
     );
-
 }
 
 function Breadcrumbs({
@@ -1008,7 +1094,9 @@ function FolderTree({
     if (!nodes.length) {
         return (
             depth === 0 && (
-                <p className="text-slate-400 text-xs">Aucun dossier pour l'instant.</p>
+                <p className="text-slate-400 text-xs">
+                    Aucun dossier pour l`&apos`instant.
+                </p>
             )
         );
     }
