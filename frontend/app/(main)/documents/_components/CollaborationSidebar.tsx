@@ -9,7 +9,7 @@ import {
     Profile,
     SessionParticipantEntry,
     formatTimestamp,
-} from "../types";
+} from "@/types/documents";
 
 interface CollaborationSidebarProps {
     participants: SessionParticipantEntry[];

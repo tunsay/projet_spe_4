@@ -1,6 +1,6 @@
 import { Dialog } from "@headlessui/react";
 import { FormEvent } from "react";
-import { FeedbackMessage } from "../types";
+import { FeedbackMessage } from "@/types/documents";
 
 interface InviteCollaboratorModalProps {
     isOpen: boolean;
@@ -33,6 +33,7 @@ export function InviteCollaboratorModal({
         <Dialog
             as="div"
             className="fixed inset-0 z-40 overflow-y-auto"
+            open={isOpen}
             onClose={onClose}
         >
             <div className="flex min-h-full items-center justify-center p-4">

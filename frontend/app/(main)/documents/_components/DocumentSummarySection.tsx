@@ -1,4 +1,4 @@
-import { DocumentDetail } from "../types";
+import { DocumentDetail } from "@/types/documents";
 
 interface DocumentSummarySectionProps {
     document: DocumentDetail;

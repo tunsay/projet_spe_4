@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SaveState, DocumentDetail } from "../types";
+import { SaveState, DocumentDetail } from "@/types/documents";
 
 interface DocumentToolbarProps {
     document: DocumentDetail | null;

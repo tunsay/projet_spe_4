@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import useSocket from "./useSocket";
+import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
 import { Socket } from "socket.io-client";
+import { ChatMessageEntry } from "@/types/documents";
 
 type InitialState = any;
 
@@ -27,6 +29,7 @@ export default function useRoomDocument(documentId: string) {
     const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(null);
     const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(null);
     const [joinError, setJoinError] = useState<string | null>(null);
+    const [messagesList, setMessagesList] = useState<ChatMessageEntry[]>([]);
 
     useEffect(() => {
         if (!socket) return;
@@ -102,6 +105,8 @@ export default function useRoomDocument(documentId: string) {
         on("message", handlePossibleJoinPayload);
         on("presence", handlePresence);
         on("doc-change", handleDocChange);
+        on("chat:new-message", handleIncomingMessage);
+
         on("connect", handleConnect);
         on("disconnect", handleDisconnect);
 
@@ -111,6 +116,7 @@ export default function useRoomDocument(documentId: string) {
                 off("message", handlePossibleJoinPayload);
                 off("presence", handlePresence);
                 off("doc-change", handleDocChange);
+                off("chat:new-message", handleIncomingMessage);
                 off("connect", handleConnect);
                 off("disconnect", handleDisconnect);
             } catch (e) {
@@ -139,14 +145,77 @@ export default function useRoomDocument(documentId: string) {
         [socket, documentId]
     );
 
+    const handleIncomingMessage = (payload: unknown) => {
+        if (
+            !payload ||
+            typeof payload !== "object" ||
+            !("docId" in payload)
+        ) {
+            return;
+        }
+
+        const { docId, message: rawMessage } = payload as {
+            docId?: string;
+            message?: unknown;
+        };
+
+        if (docId !== documentId || !rawMessage) {
+            return;
+        }
+
+        const normalized = normalizeMessageRecord(rawMessage);
+        setMessagesList((current) => upsertMessage(current, normalized));
+    };
+
+    const sendMessage = useCallback(
+        (outboundMessage: any, fallbackId: string): Promise<ChatMessageEntry> => {
+            if (!socket) return Promise.reject(new Error("no-socket"));
+
+            return new Promise<ChatMessageEntry>((resolve, reject) => {
+                try {
+                    // Optimistically add the message to the list
+                    const optimistic = normalizeMessageRecord(outboundMessage, fallbackId);
+                    setMessagesList((cur) => upsertMessage(cur, optimistic));
+
+                    socket.emit(
+                        "chat:new-message",
+                        { docId: documentId, message: outboundMessage },
+                        (ack: any) => {
+                            if (ack && ack.ok === true) {
+                                const normalized = normalizeMessageRecord(ack.message ?? outboundMessage);
+                                setMessagesList((cur) => upsertMessage(cur, normalized));
+                                return resolve(normalized);
+                            }
+
+                            if (ack && ack.ok === false) {
+                                return reject(new Error(ack.reason || "server_rejected"));
+                            }
+
+                            // No ack provided by server — resolve with optimistic message
+                            return resolve(optimistic);
+                        }
+                    );
+                } catch (e) {
+                    reject(e as Error);
+                }
+            });
+        },
+        [socket, documentId]
+    );
+
     return {
         socket: socket as Socket | null,
         joined,
         initialState,
+        setInitialState,
         membersCount,
         lastPresence,
         lastDocChange,
         joinError,
         sendChange,
+        handleIncomingMessage,
+        sendMessage,
+        messagesList,
+        setMessagesList
     };
 }

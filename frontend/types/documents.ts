@@ -51,3 +51,5 @@ export const formatTimestamp = (value: string) => {
         month: "2-digit",
     });
 };
+
+export type AnyRecord = Record<string, unknown>;

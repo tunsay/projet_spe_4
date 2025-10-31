@@ -12,7 +12,7 @@ import {
     useState,
 } from "react";
 import { buildApiUrl } from "@/lib/api";
-import useSocket from "@/hooks/useSocket";
+import useRoomDocument from "@/hooks/useRoomDocument";
 import { handleUnauthorized } from "@/lib/auth";
 import { DocumentToolbar } from "../_components/DocumentToolbar";
 import { DocumentTextSection } from "../_components/DocumentTextSection";
@@ -26,153 +26,8 @@ import {
     Profile,
     SaveState,
     SessionParticipantEntry,
-} from "../types";
-
-const normalizeErrorMessage = (value: unknown, fallback: string) => {
-    if (
-        value &&
-        typeof value === "object" &&
-        "error" in value &&
-        typeof (value as { error?: unknown }).error === "string"
-    ) {
-        return (value as { error: string }).error;
-    }
-
-    if (
-        value &&
-        typeof value === "object" &&
-        "message" in value &&
-        typeof (value as { message?: unknown }).message === "string"
-    ) {
-        return (value as { message: string }).message;
-    }
-
-    return fallback;
-};
-
-const createMessageFallbackId = () =>
-    `message-${Date.now()}-${Math.round(Math.random() * 100000)}`;
-
-type AnyRecord = Record<string, unknown>;
-
-const getString = (value: unknown): string | null =>
-    typeof value === "string" ? value : null;
-
-const getNonEmptyString = (value: unknown): string | null =>
-    typeof value === "string" && value.trim().length > 0
-        ? value.trim()
-        : null;
-
-const pickFromRecord = (
-    record: AnyRecord | undefined,
-    keys: string[],
-    { allowEmpty = false }: { allowEmpty?: boolean } = {}
-): string | null => {
-    if (!record) return null;
-    for (const key of keys) {
-        const value = record[key];
-        if (typeof value === "string") {
-            if (allowEmpty) {
-                if (value.length > 0) return value;
-            } else if (value.trim().length > 0) {
-                return value.trim();
-            }
-        }
-    }
-    return null;
-};
-
-const normalizeMessageRecord = (
-    input: unknown,
-    fallbackId?: string
-): ChatMessageEntry => {
-    const fallback = fallbackId ?? createMessageFallbackId();
-
-    if (!input || typeof input !== "object") {
-        return {
-            id: fallback,
-            content: "",
-            user_id: "",
-            created_at: new Date().toISOString(),
-            authorName: null,
-            authorEmail: null,
-        };
-    }
-
-    const record = input as AnyRecord;
-    const author =
-        record.author && typeof record.author === "object"
-            ? (record.author as AnyRecord)
-            : undefined;
-
-    const idValue = record.id;
-    const normalizedId =
-        typeof idValue === "number" || typeof idValue === "string"
-            ? idValue
-            : fallback;
-
-    const content = getString(record.content) ?? "";
-    const createdAt =
-        getString(record.created_at) ??
-        getString(record.createdAt) ??
-        new Date().toISOString();
-
-    const userId =
-        getString(record.user_id) ??
-        getString(record.userId) ??
-        (author ? getString(author.id) : null) ??
-        "";
-
-    const authorName =
-        getNonEmptyString(record.authorName) ??
-        getNonEmptyString(record.display_name) ??
-        getNonEmptyString(record.displayName) ??
-        getNonEmptyString(record.name) ??
-        pickFromRecord(author, ["display_name", "displayName", "name"]) ??
-        null;
-
-    const authorEmail =
-        getNonEmptyString(record.authorEmail) ??
-        pickFromRecord(record, ["email"], { allowEmpty: true }) ??
-        pickFromRecord(author, ["email"], { allowEmpty: true }) ??
-        null;
-
-    return {
-        id: normalizedId,
-        content,
-        user_id: userId,
-        created_at: createdAt,
-        authorName,
-        authorEmail,
-    };
-};
-
-const sortMessagesByDate = (
-    entries: ChatMessageEntry[]
-): ChatMessageEntry[] =>
-    [...entries].sort((a, b) => {
-        const aTime = new Date(a.created_at).getTime();
-        const bTime = new Date(b.created_at).getTime();
-        if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
-            return 0;
-        }
-        return aTime - bTime;
-    });
-
-const upsertMessage = (
-    entries: ChatMessageEntry[],
-    nextEntry: ChatMessageEntry
-): ChatMessageEntry[] => {
-    const index = entries.findIndex(
-        (item) => String(item.id) === String(nextEntry.id)
-    );
-    if (index !== -1) {
-        const copy = [...entries];
-        copy[index] = nextEntry;
-        return sortMessagesByDate(copy);
-    }
-    return sortMessagesByDate([...entries, nextEntry]);
-};
+} from "@/types/documents";
+import { normalizeMessageRecord, sortMessagesByDate, normalizeErrorMessage } from "@/utils/message";
 
 export default function DocumentDetailPage() {
     const router = useRouter();
@@ -185,12 +40,16 @@ export default function DocumentDetailPage() {
             ? rawId[0] ?? ""
             : "";
 
-    const { socket, connect } = useSocket(documentId);
-    const hasJoinedSocketRef = useRef(false);
-    const [isRealtimeReady, setRealtimeReady] = useState(false);
+    const {
+        joined: isRealtimeReady,
+        initialState: doc,
+        setInitialState: setDoc,
+        messagesList,
+        setMessagesList,
+        sendMessage,
+    } = useRoomDocument(documentId);
 
     const [profile, setProfile] = useState<Profile | null>(null);
-    const [doc, setDoc] = useState<DocumentDetail | null>(null);
     const [content, setContent] = useState<string>("");
     const [persistedContent, setPersistedContent] = useState<string>("");
     const [loading, setLoading] = useState(true);
@@ -206,7 +65,6 @@ export default function DocumentDetailPage() {
     const [participantsError, setParticipantsError] = useState<string | null>(
         null
     );
-    const [messagesList, setMessagesList] = useState<ChatMessageEntry[]>([]);
     const [messagesLoading, setMessagesLoading] = useState(false);
     const [messagesError, setMessagesError] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
@@ -663,98 +521,6 @@ export default function DocumentDetailPage() {
     }, [doc, documentId, fetchParticipants, fetchMessages]);
 
     useEffect(() => {
-        if (!documentId) return;
-
-        if (!socket) {
-            setRealtimeReady(false);
-            connect();
-            return;
-        }
-
-        const joinRoom = () => {
-            if (!documentId) return;
-            try {
-                socket.emit(
-                    "join-document",
-                    { docId: documentId },
-                    (response: unknown) => {
-                        if (
-                            response &&
-                            typeof response === "object" &&
-                            "ok" in response &&
-                            (response as { ok?: unknown }).ok === false
-                        ) {
-                            console.warn(
-                                "join-document refusé:",
-                                response
-                            );
-                            hasJoinedSocketRef.current = false;
-                            setRealtimeReady(false);
-                            return;
-                        }
-                        hasJoinedSocketRef.current = true;
-                        setRealtimeReady(true);
-                    }
-                );
-                // Marquer comme joint optimistement pour éviter les boucles
-                hasJoinedSocketRef.current = true;
-            } catch (error) {
-                console.error("Erreur join-document:", error);
-                setRealtimeReady(false);
-            }
-        };
-
-        const handleDisconnect = () => {
-            hasJoinedSocketRef.current = false;
-            setRealtimeReady(false);
-        };
-
-        const handleIncomingMessage = (payload: unknown) => {
-            if (
-                !payload ||
-                typeof payload !== "object" ||
-                !("docId" in payload)
-            ) {
-                return;
-            }
-
-            const { docId, message: rawMessage } = payload as {
-                docId?: string;
-                message?: unknown;
-            };
-
-            if (docId !== documentId || !rawMessage) {
-                return;
-            }
-
-            const normalized = normalizeMessageRecord(rawMessage);
-            setMessagesList((current) => upsertMessage(current, normalized));
-        };
-
-        if (socket.connected) {
-            if (!hasJoinedSocketRef.current) {
-                joinRoom();
-            }
-        } else {
-            connect();
-        }
-
-        socket.on("connect", joinRoom);
-        socket.on("disconnect", handleDisconnect);
-        socket.on("chat:new-message", handleIncomingMessage);
-
-        return () => {
-            try {
-                socket.off("connect", joinRoom);
-                socket.off("disconnect", handleDisconnect);
-                socket.off("chat:new-message", handleIncomingMessage);
-            } catch {
-                // ignore
-            }
-        };
-    }, [socket, connect, documentId]);
-
-    useEffect(() => {
         if (!isTextDocument) return;
         if (content === persistedContent) return;
 
@@ -856,34 +622,7 @@ export default function DocumentDetailPage() {
                 );
 
                 setNewMessage("");
-
-                setMessagesList((current) =>
-                    upsertMessage(current, normalizedMessage)
-                );
-
-                if (socket && documentId) {
-                    const outboundMessage =
-                        messagePayload && typeof messagePayload === "object"
-                            ? messagePayload
-                            : {
-                                  id: normalizedMessage.id,
-                                  content: normalizedMessage.content,
-                                  user_id: normalizedMessage.user_id,
-                                  created_at: normalizedMessage.created_at,
-                                  author: fallbackAuthor,
-                              };
-                    try {
-                        socket.emit("chat:new-message", {
-                            docId: documentId,
-                            message: outboundMessage,
-                        });
-                    } catch (err) {
-                        console.error(
-                            "Échec de l'émission du message chat:",
-                            err
-                        );
-                    }
-                }
+                sendMessage(normalizedMessage, normalizedMessage.id.toString());
 
                 if (!messagePayload) {
                     await fetchMessages();
@@ -907,8 +646,8 @@ export default function DocumentDetailPage() {
             profile?.id,
             profile?.name,
             profile?.email,
-            socket,
             fetchMessages,
+            sendMessage
         ]
     );
 
