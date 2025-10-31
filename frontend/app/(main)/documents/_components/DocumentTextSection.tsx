@@ -1,26 +1,48 @@
 import { DocumentDetail } from "@/types/documents";
+import { useEffect, useRef, useState } from "react";
 
 interface DocumentTextSectionProps {
     document: DocumentDetail;
     content: string;
-    onContentChange: (value: string) => void;
+    selection?: { start: number; end: number };
+    setCurrentSelection: (selection: { start: number; end: number }) => void;
+    onContentChange: (newContent: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => void;
     ownerDisplayName: string;
 }
 
 export function DocumentTextSection({
     document,
     content,
+    selection,
+    setCurrentSelection,
     onContentChange,
     ownerDisplayName,
 }: DocumentTextSectionProps) {
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+    useEffect(() => {
+        if (!selection) {
+            return;
+        }
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.setSelectionRange(selection.end, selection.end);
+        }
+    }, [content]);
+
     return (
         <div className="space-y-6">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                 <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
                     Contenu du document
                     <textarea
+                        ref={(ref) => (textareaRef.current = ref)}
                         value={content}
-                        onChange={(event) => onContentChange(event.target.value)}
+                        onChange={(event) => onContentChange(event.target.value, event.target.selectionStart, event.target.selectionEnd, event.target.selectionDirection)}
+                        onSelect={(event) => setCurrentSelection({
+                            start: event.currentTarget.selectionStart,
+                            end: event.currentTarget.selectionEnd,
+                        })}
                         rows={18}
                         className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-inner focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
                         placeholder="Commencez à saisir votre contenu…"

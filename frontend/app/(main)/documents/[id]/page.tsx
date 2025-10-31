@@ -64,6 +64,8 @@ export default function DocumentDetailPage() {
     const {
         participants,
         setParticipants,
+        content,
+        setContent,
         joined: isRealtimeReady,
         initialState: doc,
         setInitialState: setDoc,
@@ -71,10 +73,11 @@ export default function DocumentDetailPage() {
         setMessagesList,
         sendMessage,
         toggleReaction,
+        currentSelection,
+        setCurrentSelection
     } = useRoomDocument(socket, documentId);
 
     const [profile, setProfile] = useState<Profile | null>(null);
-    const [content, setContent] = useState<string>("");
     const [persistedContent, setPersistedContent] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<FeedbackMessage | null>(null);
@@ -261,7 +264,7 @@ export default function DocumentDetailPage() {
             setDoc(data);
 
             const initial = data.content ?? "";
-            setContent(initial);
+            setContent(initial, initial.length, initial.length, "forward");
             setPersistedContent(initial);
             setLastSavedAt(
                 data.last_modified_at ? new Date(data.last_modified_at) : null
@@ -811,6 +814,11 @@ export default function DocumentDetailPage() {
                     {doc.type === "text" ? (
                         <DocumentTextSection
                             document={doc}
+                            selection={{
+                                start: currentSelection?.start ?? 0,
+                                end: currentSelection?.end ?? 0,
+                            }}
+                            setCurrentSelection={setCurrentSelection}
                             content={content}
                             onContentChange={setContent}
                             ownerDisplayName={ownerDisplayName}

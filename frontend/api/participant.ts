@@ -26,8 +26,6 @@ export const fetchParticipants = async (documentId: string): Promise<SessionPart
             throw new Error("Impossible de récupérer les participants.");
         }
 
-        console.log("response payload participants:", payload);
-
         const rawList = Array.isArray(
             (payload as { participants?: unknown }).participants
         )

@@ -256,10 +256,11 @@ io.on("connection", (socket) => {
     });
 
     // Exemple d'édition (diff/delta)
-    socket.on("doc-change", async ({ docId, delta }, cb) => {
+    socket.on("doc-change-client", async ({ docId, delta }, cb) => {
         try {
             const room = `document:${docId}`;
             // Validation & autorisation rapide
+            console.log("doc-change-client received for docId:", docId, "delta:", delta);
             if (!socket.rooms.has(room)) {
                 console.log(
                     "user",
@@ -278,13 +279,13 @@ io.on("connection", (socket) => {
 
             // Appliquer/persister le delta (optimiste ou via CRDT)
             //await persistDelta(docId, delta, socket.user.id);
+            console.log("doc-change-client broadcasted to room:", room);
 
             // Broadcast à la room (sauf l'émetteur)
             socket
                 .to(room)
-                .emit("doc-change", { docId, delta, author: socket.user.id });
-
-            respond({ ok: true }, cb);
+                .emit("doc-change-server", { docId, delta, userId: socket.user?.id });
+            console.log("doc-change-client broadcasted to room:", room);
             console.log(
                 "user",
                 socket.id,
@@ -297,6 +298,7 @@ io.on("connection", (socket) => {
                 docId,
                 " - success"
             );
+            return respond({ ok: true, delta, userId: socket.user?.id }, cb);
         } catch (error) {
             console.error("Error in join-document:", error);
             return respond({ ok: false, reason: "internal_error" }, cb);
@@ -314,7 +316,7 @@ io.on("connection", (socket) => {
           console.log("user", socket.id, "position-update rejected (not in room)", room);
           return respond({ ok: false, reason: "not_joined" }, cb);
         }
-        socket.to(room).emit("position-update", {userId, start, end, direction})
+        socket.to(room).emit("position-update", { docId, userId, start, end, direction})
         return respond({ ok: true }, cb);
       } catch (error) {
         console.error("Error in position-update:", error);

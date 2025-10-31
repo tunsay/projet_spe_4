@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Socket } from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
-import { ChatMessageEntry } from "@/types/documents";
+import { ChatMessageEntry, DocumentDetail } from "@/types/documents";
 import { SessionParticipantEntry } from "@/types/documents";
 import { fetchParticipants } from "@/api/participant";
-type InitialState = any;
+type InitialState = DocumentDetail;
 
 type PresenceEvent = {
     type: "joined" | "left";
@@ -15,21 +15,25 @@ type PresenceEvent = {
 
 type DocChangeEvent = {
     docId: string;
-    delta: any;
-    author?: string;
+    delta: Delta;
+    userId: string;
+};
+
+type Delta = {
+    oldText: { start: number; end: number; text: string };
+    newText: { start: number; end: number; text: string };
 };
 
 export default function useRoomDocument(socket: Socket | null, documentId: string | null) {
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
+    const [content, setContent] = useState<string>("");
     const [membersCount, setMembersCount] = useState<number>(0);
     const [participants, setParticipants] = useState<SessionParticipantEntry[]>([]);
     const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(
         null
     );
-    const [lastDocChange, setLastDocChange] = useState<DocChangeEvent | null>(
-        null
-    );
+    const [currentSelection, setCurrentSelection] = useState<{start: number; end: number} | null>(null);
     const [joinError, setJoinError] = useState<string | null>(null);
     const [messagesListState, setMessagesListState] =
         useState<ChatMessageEntry[]>([]);
@@ -254,6 +258,25 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         };
     }, []);
 
+    const applyDeltaToContent = (delta: Delta) => {
+        const { newText } = delta;
+        setContent(newText.text);
+    }
+
+    const updateParticipantSelection = (userId: string, start: number, end: number) => {
+        setParticipants((prevParticipants) => prevParticipants.map((participant) => {
+            if (participant.userId === userId) {
+                return {
+                    ...participant,
+                    start_position: start,
+                    end_position: end,
+                    direction: "forward",
+                };
+            }
+            return participant;
+        }));
+    };
+
     useEffect(() => {
         if (!socket) return;
 
@@ -266,7 +289,6 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             if (!payload || typeof payload !== "object") return;
             // If docId matches or no docId provided, treat as possible join ack
             if (payload.docId && payload.docId !== documentId) return;
-
             if (payload.ok === true) {
                 setJoined(true);
                 setInitialState(payload.initialState ?? null);
@@ -302,7 +324,9 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
 
         const handleDocChange = (payload: DocChangeEvent) => {
             if (!mounted) return;
-            setLastDocChange(payload);
+            if (payload.docId === documentId) {
+                applyDeltaToContent(payload.delta);
+            }
         };
 
         // Prepare a join emitter that will run immediately if connected,
@@ -360,7 +384,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         // attached to the current shared socket reference.
         socket.on("message", handlePossibleJoinPayload);
         socket.on("presence", handlePresence);
-        socket.on("doc-change", handleDocChange);
+        socket.on("doc-change-server", handleDocChange);
         socket.on("position-update", handlePositionUpdate);
         socket.on("chat:new-message", handleIncomingMessage);
         socket.on("chat:reaction", handleIncomingReaction);
@@ -374,7 +398,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             try {
                 socket.off("message", handlePossibleJoinPayload);
                 socket.off("presence", handlePresence);
-                socket.off("doc-change", handleDocChange);
+                socket.off("doc-change-server", handleDocChange);
                 socket.off("position-update", handlePositionUpdate);
                 socket.off("chat:new-message", handleIncomingMessage);
                 socket.off("chat:reaction", handleIncomingReaction);
@@ -386,35 +410,42 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         };
     }, [socket, documentId]);
 
-    const sendChange = useCallback(
-        (delta: any) => {
-            if (!socket) return Promise.reject(new Error("no-socket"));
-            if (!documentId) return Promise.reject(new Error("no-doc"));
-            return new Promise<void>((resolve, reject) => {
-                try {
-                    socket.emit(
-                        "doc-change",
-                        { docId: documentId, delta },
-                        (ack: any) => {
-                            // server may ack
-                            if (ack && ack.ok === true) return resolve();
-                            if (ack && ack.ok === false)
-                                return reject(
-                                    new Error(ack.reason || "server_rejected")
-                                );
-                            // If no ack, resolve optimistically
-                            return resolve();
-                        }
-                    );
-                } catch (e) {
-                    reject(e);
+    useEffect(() => {
+        if (!initialState) return;
+
+        setContent(initialState.content ?? "");
+    }, [initialState]);
+
+   const diffString = (oldText: string, newText: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => {
+        const startNewText = selectionDirection === "forward" ? selectionStart : selectionEnd;
+        const endNewText = selectionDirection === "forward" ? selectionEnd : selectionStart;
+        return {
+            oldText: { start: currentSelection?.start, end: currentSelection?.end, text: oldText },
+            newText: { start: startNewText, end: endNewText, text: newText }
+        };
+    };
+    const updateContent = useCallback(
+        (newContent: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => {
+            if (!socket) return;
+            const delta = diffString(content, newContent, selectionStart, selectionEnd, selectionDirection);
+            socket.emit(
+                "doc-change-client",
+                { docId: documentId, delta },
+                ({ ok, delta, userId }: { ok: boolean, delta: Delta, userId: string }) => {
+                    if (ok === true) {
+                        applyDeltaToContent(delta);
+                        updateParticipantSelection(userId, delta.newText.start, delta.newText.end);
+                        setCurrentSelection({ start: delta.newText.start, end: delta.newText.end });
+                    } else {
+                        console.log("Content update rejected by server");
+                    }
                 }
-            });
+            );
         },
-        [socket, documentId]
+        [content, applyDeltaToContent]
     );
 
-    const handlePositionUpdate = (docId: string, userId: string, start: number, end: number, direction: string) => {
+    const handlePositionUpdate = (docId: string, userId: string, start: number, end: number, direction: "backward" | "forward") => {
         if (docId !== documentId) {
             return;
         }
@@ -432,7 +463,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     }
 
     const sendNewPosition = useCallback(
-        (docId: string, userId: string, start: number, end: number, direction: string): Promise<SessionParticipantEntry[]> => {
+        (docId: string, userId: string, start: number, end: number, direction: "backward" | "forward"): Promise<SessionParticipantEntry[]> => {
             if (!socket) return Promise.reject(new Error("no-socket"));
 
             return new Promise<SessionParticipantEntry[]>((resolve, reject) => {
@@ -669,12 +700,12 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     return {
         joined,
         initialState,
+        content,
+        setContent: updateContent,
         setInitialState,
         membersCount,
         lastPresence,
-        lastDocChange,
         joinError,
-        sendChange,
         handlePositionUpdate,
         sendNewPosition,
         handleIncomingMessage,
@@ -684,5 +715,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         participants,
         setParticipants,
         setMessagesList,
+        currentSelection,
+        setCurrentSelection,
     };
 }
