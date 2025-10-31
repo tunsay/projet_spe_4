@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { buildApiUrl } from "@/lib/api";
+import { performLogout } from "@/lib/auth";
 
 // --- Types et Endpoints ---
 // ⚠️ Mise à jour de l'interface pour inclure le rôle
@@ -13,11 +14,12 @@ interface Profile {
 }
 
 const PROFILE_ENDPOINT = buildApiUrl("/api/profile");
-const LOGOUT_ENDPOINT = buildApiUrl("/api/auth/logout");
 
 // --- Composant Principal Header ---
 export default function Header() {
     const router = useRouter();
+    const pathname = usePathname();
+    const hideHeader = pathname?.startsWith("/profile/2fa");
     // Utilisation du type Profile mis à jour
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -26,14 +28,8 @@ export default function Header() {
     const handleLogout = useCallback(async () => {
         setError(null);
         try {
-            // Note: Le point de terminaison de déconnexion est toujours '/auth/logout'
-            await fetch(LOGOUT_ENDPOINT, {
-                method: "POST",
-                credentials: "include",
-            });
-
+            await performLogout(router);
             setProfile(null);
-            router.push("/login");
         } catch (err) {
             console.error("Erreur de déconnexion:", err);
             setError("Échec de la déconnexion.");
@@ -42,6 +38,12 @@ export default function Header() {
 
     useEffect(() => {
         const checkAuth = async () => {
+            if (hideHeader) {
+                setLoading(false);
+                setProfile(null);
+                return;
+            }
+
             setLoading(true);
             setError(null);
 
@@ -51,7 +53,12 @@ export default function Header() {
                     credentials: "include",
                 });
 
-                if (response.status === 401 || response.status === 403) {
+                if (response.status === 401) {
+                    await performLogout(router);
+                    return;
+                }
+
+                if (response.status === 403) {
                     setProfile(null);
                     return;
                 }
@@ -82,10 +89,14 @@ export default function Header() {
         };
 
         checkAuth();
-    }, []);
+    }, [hideHeader, router]);
 
     const displayName = profile?.name || profile?.email || "Utilisateur";
     const isAdmin = profile?.role === "admin"; // Nouvelle vérification du rôle
+
+    if (hideHeader) {
+        return null;
+    }
 
     // --- Rendu ---
     return (

@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { buildApiUrl } from "@/lib/api";
+import { handleUnauthorized } from "@/lib/auth";
 
 // --- Endpoints ---
 const ENDPOINTS = {
@@ -80,8 +81,7 @@ export default function ProfilePage() {
                     credentials: "include",
                 });
 
-                if (response.status === 401) {
-                    router.replace("/login");
+                if (await handleUnauthorized(response, router)) {
                     return;
                 }
 
@@ -121,6 +121,10 @@ export default function ProfilePage() {
                 credentials: "include",
             });
 
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
+
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response, null);
                 setPageError(errorMessage);
@@ -136,7 +140,7 @@ export default function ProfilePage() {
         } finally {
             setIsSetupLoading(false);
         }
-    }, []);
+    }, [router]);
 
     const handleActivate2FA = useCallback(
         async (e: React.FormEvent<HTMLFormElement>) => {
@@ -158,6 +162,10 @@ export default function ProfilePage() {
                     credentials: "include",
                     body: JSON.stringify({ token: activationToken }),
                 });
+
+                if (await handleUnauthorized(response, router)) {
+                    return;
+                }
 
                 if (!response.ok) {
                     const errorMessage = await extractErrorMessage(
@@ -186,7 +194,7 @@ export default function ProfilePage() {
                 setIsActivationLoading(false);
             }
         },
-        [activationToken, profile]
+        [activationToken, profile, router]
     );
 
     const handleDisable2FA = useCallback(async () => {
@@ -198,6 +206,10 @@ export default function ProfilePage() {
                 method: "POST",
                 credentials: "include",
             });
+
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
 
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response, null);
@@ -221,7 +233,7 @@ export default function ProfilePage() {
         } finally {
             setIsDisableLoading(false);
         }
-    }, [profile]);
+    }, [profile, router]);
 
     // --- Retours Anticipés ---
     if (authError) {

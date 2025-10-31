@@ -12,6 +12,8 @@ import {
     useState,
 } from "react";
 import { buildApiUrl } from "@/lib/api";
+import useSocket from "@/hooks/useSocket";
+import { handleUnauthorized } from "@/lib/auth";
 import { DocumentToolbar } from "../_components/DocumentToolbar";
 import { DocumentTextSection } from "../_components/DocumentTextSection";
 import { DocumentSummarySection } from "../_components/DocumentSummarySection";
@@ -48,6 +50,130 @@ const normalizeErrorMessage = (value: unknown, fallback: string) => {
     return fallback;
 };
 
+const createMessageFallbackId = () =>
+    `message-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+
+type AnyRecord = Record<string, unknown>;
+
+const getString = (value: unknown): string | null =>
+    typeof value === "string" ? value : null;
+
+const getNonEmptyString = (value: unknown): string | null =>
+    typeof value === "string" && value.trim().length > 0
+        ? value.trim()
+        : null;
+
+const pickFromRecord = (
+    record: AnyRecord | undefined,
+    keys: string[],
+    { allowEmpty = false }: { allowEmpty?: boolean } = {}
+): string | null => {
+    if (!record) return null;
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string") {
+            if (allowEmpty) {
+                if (value.length > 0) return value;
+            } else if (value.trim().length > 0) {
+                return value.trim();
+            }
+        }
+    }
+    return null;
+};
+
+const normalizeMessageRecord = (
+    input: unknown,
+    fallbackId?: string
+): ChatMessageEntry => {
+    const fallback = fallbackId ?? createMessageFallbackId();
+
+    if (!input || typeof input !== "object") {
+        return {
+            id: fallback,
+            content: "",
+            user_id: "",
+            created_at: new Date().toISOString(),
+            authorName: null,
+            authorEmail: null,
+        };
+    }
+
+    const record = input as AnyRecord;
+    const author =
+        record.author && typeof record.author === "object"
+            ? (record.author as AnyRecord)
+            : undefined;
+
+    const idValue = record.id;
+    const normalizedId =
+        typeof idValue === "number" || typeof idValue === "string"
+            ? idValue
+            : fallback;
+
+    const content = getString(record.content) ?? "";
+    const createdAt =
+        getString(record.created_at) ??
+        getString(record.createdAt) ??
+        new Date().toISOString();
+
+    const userId =
+        getString(record.user_id) ??
+        getString(record.userId) ??
+        (author ? getString(author.id) : null) ??
+        "";
+
+    const authorName =
+        getNonEmptyString(record.authorName) ??
+        getNonEmptyString(record.display_name) ??
+        getNonEmptyString(record.displayName) ??
+        getNonEmptyString(record.name) ??
+        pickFromRecord(author, ["display_name", "displayName", "name"]) ??
+        null;
+
+    const authorEmail =
+        getNonEmptyString(record.authorEmail) ??
+        pickFromRecord(record, ["email"], { allowEmpty: true }) ??
+        pickFromRecord(author, ["email"], { allowEmpty: true }) ??
+        null;
+
+    return {
+        id: normalizedId,
+        content,
+        user_id: userId,
+        created_at: createdAt,
+        authorName,
+        authorEmail,
+    };
+};
+
+const sortMessagesByDate = (
+    entries: ChatMessageEntry[]
+): ChatMessageEntry[] =>
+    [...entries].sort((a, b) => {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+            return 0;
+        }
+        return aTime - bTime;
+    });
+
+const upsertMessage = (
+    entries: ChatMessageEntry[],
+    nextEntry: ChatMessageEntry
+): ChatMessageEntry[] => {
+    const index = entries.findIndex(
+        (item) => String(item.id) === String(nextEntry.id)
+    );
+    if (index !== -1) {
+        const copy = [...entries];
+        copy[index] = nextEntry;
+        return sortMessagesByDate(copy);
+    }
+    return sortMessagesByDate([...entries, nextEntry]);
+};
+
 export default function DocumentDetailPage() {
     const router = useRouter();
     const routeParams = useParams();
@@ -58,6 +184,10 @@ export default function DocumentDetailPage() {
             : Array.isArray(rawId)
             ? rawId[0] ?? ""
             : "";
+
+    const { socket, connect } = useSocket(documentId);
+    const hasJoinedSocketRef = useRef(false);
+    const [isRealtimeReady, setRealtimeReady] = useState(false);
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [doc, setDoc] = useState<DocumentDetail | null>(null);
@@ -95,12 +225,24 @@ export default function DocumentDetailPage() {
     const ownerDisplayName = useMemo(() => {
         if (!doc) return "";
         if (profile && doc.owner_id === profile.id) {
-            return profile.name || "Vous";
+            return (
+                (profile.name && profile.name.trim()) ||
+                (profile.email && profile.email.trim()) ||
+                profile.id ||
+                ""
+            );
         }
         const owner =
             participants.find((item) => item.userId === doc.owner_id) ??
             participants.find((item) => item.email === doc.owner_id);
-        return owner?.displayName ?? "Propriétaire";
+        if (owner) {
+            return (
+                (owner.displayName && owner.displayName.trim()) ||
+                (owner.email && owner.email.trim()) ||
+                owner.userId
+            );
+        }
+        return "";
     }, [doc, participants, profile]);
 
     const downloadUrl = useMemo(() => {
@@ -155,8 +297,7 @@ export default function DocumentDetailPage() {
                 credentials: "include",
             });
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return null;
             }
 
@@ -207,8 +348,7 @@ export default function DocumentDetailPage() {
                 }
             );
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return;
             }
 
@@ -281,8 +421,7 @@ export default function DocumentDetailPage() {
                     }
                 );
 
-                if (response.status === 401) {
-                    router.replace("/login");
+                if (await handleUnauthorized(response, router)) {
                     return;
                 }
 
@@ -337,8 +476,7 @@ export default function DocumentDetailPage() {
                 }
             );
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return;
             }
 
@@ -367,9 +505,10 @@ export default function DocumentDetailPage() {
             const normalized: SessionParticipantEntry[] = rawList.map(
                 (item, index) => {
                     if (!item || typeof item !== "object") {
+                        const fallbackId = `participant-${index}`;
                         return {
-                            userId: `participant-${index}`,
-                            displayName: "Collaborateur",
+                            userId: fallbackId,
+                            displayName: fallbackId,
                             email: "",
                         };
                     }
@@ -383,21 +522,8 @@ export default function DocumentDetailPage() {
                         (typeof participant.email === "string" && participant.email) ||
                         (rawUser && typeof rawUser.email === "string"
                             ? rawUser.email
-                            : "");
-
-                    const displayName =
-                        (rawUser &&
-                            typeof rawUser.display_name === "string" &&
-                            rawUser.display_name) ||
-                        (rawUser &&
-                            typeof rawUser.displayName === "string" &&
-                            rawUser.displayName) ||
-                        (typeof participant.display_name === "string" &&
-                            participant.display_name) ||
-                        (typeof participant.displayName === "string" &&
-                            participant.displayName) ||
-                        email ||
-                        "Collaborateur";
+                            : "") ||
+                        "";
 
                     const userId =
                         (typeof participant.user_id === "string" && participant.user_id) ||
@@ -408,6 +534,23 @@ export default function DocumentDetailPage() {
                             rawUser.user_id) ||
                         email ||
                         `participant-${index}`;
+
+                    const nameFromRecord =
+                        (rawUser &&
+                            typeof rawUser.display_name === "string" &&
+                            rawUser.display_name) ||
+                        (rawUser &&
+                            typeof rawUser.displayName === "string" &&
+                            rawUser.displayName) ||
+                        (rawUser && typeof rawUser.name === "string" && rawUser.name) ||
+                        (typeof participant.display_name === "string" &&
+                            participant.display_name) ||
+                        (typeof participant.displayName === "string" &&
+                            participant.displayName) ||
+                        (typeof participant.name === "string" && participant.name) ||
+                        null;
+
+                    const displayName = nameFromRecord || email || userId;
 
                     return {
                         userId,
@@ -444,8 +587,7 @@ export default function DocumentDetailPage() {
                 }
             );
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return;
             }
 
@@ -471,46 +613,11 @@ export default function DocumentDetailPage() {
                 ? ((payload as { messages: unknown[] }).messages as unknown[])
                 : [];
 
-            const normalized = rawList
-                .map((item, index): ChatMessageEntry => {
-                    if (!item || typeof item !== "object") {
-                        return {
-                            id: `message-${index}`,
-                            content: "",
-                            user_id: "",
-                            created_at: new Date().toISOString(),
-                        };
-                    }
+            const normalized = rawList.map((item, index) =>
+                normalizeMessageRecord(item, `message-${index}`)
+            );
 
-                    const record = item as Record<string, unknown>;
-                    const createdAtRaw =
-                        (typeof record.created_at === "string" && record.created_at) ||
-                        (typeof record.createdAt === "string" && record.createdAt) ||
-                        new Date().toISOString();
-
-                    return {
-                        id:
-                            (typeof record.id === "number" || typeof record.id === "string") &&
-                            record.id !== ""
-                                ? (record.id as number | string)
-                                : `message-${index}`,
-                        content:
-                            (typeof record.content === "string" && record.content) || "",
-                        user_id:
-                            (typeof record.user_id === "string" && record.user_id) || "",
-                        created_at: createdAtRaw,
-                    };
-                })
-                .sort((a, b) => {
-                    const aTime = new Date(a.created_at).getTime();
-                    const bTime = new Date(b.created_at).getTime();
-                    if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
-                        return 0;
-                    }
-                    return aTime - bTime;
-                });
-
-            setMessagesList(normalized);
+            setMessagesList(sortMessagesByDate(normalized));
         } catch (error) {
             console.error("Erreur messages:", error);
             setMessagesError(
@@ -554,6 +661,98 @@ export default function DocumentDetailPage() {
         fetchParticipants();
         fetchMessages();
     }, [doc, documentId, fetchParticipants, fetchMessages]);
+
+    useEffect(() => {
+        if (!documentId) return;
+
+        if (!socket) {
+            setRealtimeReady(false);
+            connect();
+            return;
+        }
+
+        const joinRoom = () => {
+            if (!documentId) return;
+            try {
+                socket.emit(
+                    "join-document",
+                    { docId: documentId },
+                    (response: unknown) => {
+                        if (
+                            response &&
+                            typeof response === "object" &&
+                            "ok" in response &&
+                            (response as { ok?: unknown }).ok === false
+                        ) {
+                            console.warn(
+                                "join-document refusé:",
+                                response
+                            );
+                            hasJoinedSocketRef.current = false;
+                            setRealtimeReady(false);
+                            return;
+                        }
+                        hasJoinedSocketRef.current = true;
+                        setRealtimeReady(true);
+                    }
+                );
+                // Marquer comme joint optimistement pour éviter les boucles
+                hasJoinedSocketRef.current = true;
+            } catch (error) {
+                console.error("Erreur join-document:", error);
+                setRealtimeReady(false);
+            }
+        };
+
+        const handleDisconnect = () => {
+            hasJoinedSocketRef.current = false;
+            setRealtimeReady(false);
+        };
+
+        const handleIncomingMessage = (payload: unknown) => {
+            if (
+                !payload ||
+                typeof payload !== "object" ||
+                !("docId" in payload)
+            ) {
+                return;
+            }
+
+            const { docId, message: rawMessage } = payload as {
+                docId?: string;
+                message?: unknown;
+            };
+
+            if (docId !== documentId || !rawMessage) {
+                return;
+            }
+
+            const normalized = normalizeMessageRecord(rawMessage);
+            setMessagesList((current) => upsertMessage(current, normalized));
+        };
+
+        if (socket.connected) {
+            if (!hasJoinedSocketRef.current) {
+                joinRoom();
+            }
+        } else {
+            connect();
+        }
+
+        socket.on("connect", joinRoom);
+        socket.on("disconnect", handleDisconnect);
+        socket.on("chat:new-message", handleIncomingMessage);
+
+        return () => {
+            try {
+                socket.off("connect", joinRoom);
+                socket.off("disconnect", handleDisconnect);
+                socket.off("chat:new-message", handleIncomingMessage);
+            } catch {
+                // ignore
+            }
+        };
+    }, [socket, connect, documentId]);
 
     useEffect(() => {
         if (!isTextDocument) return;
@@ -600,8 +799,7 @@ export default function DocumentDetailPage() {
                     }
                 );
 
-                if (response.status === 401) {
-                    router.replace("/login");
+                if (await handleUnauthorized(response, router)) {
                     return;
                 }
 
@@ -621,53 +819,73 @@ export default function DocumentDetailPage() {
                     );
                 }
 
-                const created =
+                const messagePayload =
                     payload &&
                     typeof payload === "object" &&
                     payload !== null &&
                     "message" in payload
-                        ? (payload as { message?: Record<string, unknown> }).message
+                        ? (payload as { message?: unknown }).message
                         : null;
+
+                const fallbackAuthor = profile
+                    ? {
+                          id: profile.id,
+                          email: profile.email ?? null,
+                          display_name:
+                              profile.name && profile.name.trim()
+                                  ? profile.name.trim()
+                                  : null,
+                      }
+                    : {
+                          id: null,
+                          email: null,
+                          display_name: null,
+                      };
+
+                const normalizedMessage = normalizeMessageRecord(
+                    messagePayload ?? {
+                        id: Date.now(),
+                        content: trimmed,
+                        user_id: profile?.id ?? "",
+                        created_at: new Date().toISOString(),
+                        author: fallbackAuthor,
+                        email: fallbackAuthor.email,
+                        display_name: fallbackAuthor.display_name,
+                    },
+                    messagePayload ? undefined : `local-${Date.now()}`
+                );
 
                 setNewMessage("");
 
-                if (created) {
-                    setMessagesList((current) => {
-                        const next: ChatMessageEntry[] = [
-                            ...current,
-                            {
-                                id:
-                                    (typeof created?.id === "number" ||
-                                        typeof created?.id === "string") &&
-                                    created?.id !== ""
-                                        ? (created?.id as number | string)
-                                        : Date.now(),
-                                content:
-                                    (typeof created?.content === "string" &&
-                                        created?.content) ||
-                                    trimmed,
-                                user_id:
-                                    (typeof created?.user_id === "string" &&
-                                        created?.user_id) ||
-                                    profile?.id ||
-                                    "",
-                                created_at:
-                                    (typeof created?.created_at === "string" &&
-                                        created?.created_at) ||
-                                    new Date().toISOString(),
-                            },
-                        ];
+                setMessagesList((current) =>
+                    upsertMessage(current, normalizedMessage)
+                );
 
-                        return next.sort((a, b) => {
-                            const aTime = new Date(a.created_at).getTime();
-                            const bTime = new Date(b.created_at).getTime();
-                            if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
-                                return 0;
-                            }
-                            return aTime - bTime;
+                if (socket && documentId) {
+                    const outboundMessage =
+                        messagePayload && typeof messagePayload === "object"
+                            ? messagePayload
+                            : {
+                                  id: normalizedMessage.id,
+                                  content: normalizedMessage.content,
+                                  user_id: normalizedMessage.user_id,
+                                  created_at: normalizedMessage.created_at,
+                                  author: fallbackAuthor,
+                              };
+                    try {
+                        socket.emit("chat:new-message", {
+                            docId: documentId,
+                            message: outboundMessage,
                         });
-                    });
-                } else {
+                    } catch (err) {
+                        console.error(
+                            "Échec de l'émission du message chat:",
+                            err
+                        );
+                    }
+                }
+
+                if (!messagePayload) {
                     await fetchMessages();
                 }
             } catch (error) {
@@ -687,6 +905,9 @@ export default function DocumentDetailPage() {
             withUserHeaders,
             router,
             profile?.id,
+            profile?.name,
+            profile?.email,
+            socket,
             fetchMessages,
         ]
     );
@@ -733,8 +954,7 @@ export default function DocumentDetailPage() {
                     }
                 );
 
-                if (response.status === 401) {
-                    router.replace("/login");
+                if (await handleUnauthorized(response, router)) {
                     return;
                 }
 
@@ -822,48 +1042,95 @@ export default function DocumentDetailPage() {
 
         participants.forEach((participant) => {
             const key = participant.userId;
-            if (key) {
-                map.set(key, participant.displayName || participant.email || "");
+            if (!key) return;
+            const display =
+                (participant.displayName && participant.displayName.trim()) ||
+                (participant.email && participant.email.trim());
+            if (display) {
+                map.set(key, display);
             }
         });
 
         if (doc?.owner_id) {
-            map.set(doc.owner_id, ownerDisplayName || doc.owner_id);
+            const ownerName =
+                (ownerDisplayName && ownerDisplayName.trim()) ||
+                (participants.find((item) => item.userId === doc.owner_id)?.email ??
+                    doc.owner_id);
+            map.set(doc.owner_id, ownerName);
         }
 
         if (profile?.id) {
-            map.set(
-                profile.id,
-                profile.name || profile.email || "Vous"
-            );
+            const currentUserName =
+                (profile.name && profile.name.trim()) ||
+                (profile.email && profile.email.trim()) ||
+                profile.id;
+            map.set(profile.id, currentUserName);
         }
 
         return map;
     }, [participants, doc?.owner_id, ownerDisplayName, profile?.id, profile?.name, profile?.email]);
 
     const resolveAuthorName = useCallback(
-        (userId: string) => {
+        (userId: string, fallbackName?: string | null) => {
+            const fallback =
+                (fallbackName && fallbackName.trim()) ||
+                undefined;
+
             if (!userId) {
-                return "Collaborateur";
+                return (
+                    fallback ||
+                    (profile?.email && profile.email.trim()) ||
+                    ""
+                );
             }
 
             const fromLookup = messageAuthorLookup.get(userId);
-            if (fromLookup) {
+            if (fromLookup && fromLookup.trim()) {
                 return fromLookup;
             }
 
             if (userId === profile?.id) {
-                return profile?.name || profile?.email || "Vous";
+                return (
+                    (profile?.name && profile.name.trim()) ||
+                    (profile?.email && profile.email.trim()) ||
+                    userId
+                );
             }
 
             if (userId === doc?.owner_id) {
-                return ownerDisplayName || "Propriétaire";
+                return (
+                    (ownerDisplayName && ownerDisplayName.trim()) ||
+                    fallback ||
+                    doc.owner_id
+                );
             }
 
-            return "Collaborateur";
+            return fallback || userId;
         },
         [messageAuthorLookup, profile?.id, profile?.name, profile?.email, doc?.owner_id, ownerDisplayName]
     );
+
+    if (!profile || !isRealtimeReady) {
+        return (
+            <Fragment>
+                <div className="min-h-screen bg-gray-50 py-10 dark:bg-gray-900">
+                    <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center">
+                        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200">
+                            …
+                        </span>
+                        <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                            Connexion sécurisée en cours
+                        </h1>
+                        <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">
+                            Nous finalisons votre authentification avant
+                            d’afficher le document et votre profil. Veuillez
+                            patienter quelques instants.
+                        </p>
+                    </div>
+                </div>
+            </Fragment>
+        );
+    }
 
     let mainContent: ReactNode = null;
 
@@ -925,6 +1192,7 @@ export default function DocumentDetailPage() {
                     isOwner={isOwner}
                     onOpenInviteModal={openInviteModal}
                     resolveAuthorName={resolveAuthorName}
+                    isRealtimeReady={isRealtimeReady}
                 />
             </div>
         );

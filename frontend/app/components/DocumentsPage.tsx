@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { buildApiUrl } from "@/lib/api";
+import { handleUnauthorized } from "@/lib/auth";
 
 type DocumentType = "folder" | "text" | "file";
 
@@ -144,8 +145,7 @@ export default function DocumentsPage() {
                 credentials: "include",
             });
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return null;
             }
 
@@ -189,8 +189,7 @@ export default function DocumentsPage() {
                 credentials: "include",
             });
 
-            if (response.status === 401) {
-                router.replace("/login");
+            if (await handleUnauthorized(response, router)) {
                 return;
             }
             if (!response.ok) {
@@ -283,6 +282,10 @@ export default function DocumentsPage() {
                 }
             );
 
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
+
             if (!response.ok) {
                 let errorMessage = `Échec de la création: ${response.status}`;
                 try {
@@ -342,6 +345,10 @@ export default function DocumentsPage() {
                     body: formData,
                 }
             );
+
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
 
             if (!response.ok) {
                 let errorMessage = `Échec de l'importation: ${response.status}`;
@@ -422,6 +429,10 @@ export default function DocumentsPage() {
                 }
             );
 
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
+
             if (!response.ok) {
                 let errorMessage = `Échec du renommage: ${response.status}`;
                 try {
@@ -468,6 +479,10 @@ export default function DocumentsPage() {
                     headers: withUserHeaders(),
                 }
             );
+
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
 
             if (!response.ok) {
                 let errorMessage = `Échec de la suppression: ${response.status}`;

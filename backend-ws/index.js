@@ -120,6 +120,26 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("chat:new-message", async ({ docId, message }, cb) => {
+    try {
+      if (!docId || !message) {
+        return respond({ ok: false, reason: "invalid_payload" }, cb);
+      }
+
+      const room = `document:${docId}`;
+      if (!socket.rooms.has(room)) {
+        console.log("user", socket.id, "chat:new-message rejected (not in room)", room);
+        return respond({ ok: false, reason: "not_joined" }, cb);
+      }
+
+      socket.to(room).emit("chat:new-message", { docId, message });
+      return respond({ ok: true }, cb);
+    } catch (error) {
+      console.error("Error in chat:new-message:", error);
+      return respond({ ok: false, reason: "internal_error" }, cb);
+    }
+  });
+
   socket.on("ping", () => {
     console.log("ping from", socket.id);
     socket.emit("pong");

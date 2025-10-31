@@ -1,4 +1,4 @@
-import { FormEvent } from "react";
+import { FormEvent, useEffect, useRef } from "react";
 import {
     ChatBubbleLeftRightIcon,
     UserGroupIcon,
@@ -25,7 +25,8 @@ interface CollaborationSidebarProps {
     sendingMessage: boolean;
     isOwner: boolean;
     onOpenInviteModal: () => void;
-    resolveAuthorName: (userId: string) => string;
+    resolveAuthorName: (userId: string, fallbackName?: string | null) => string;
+    isRealtimeReady: boolean;
 }
 
 export function CollaborationSidebar({
@@ -43,7 +44,27 @@ export function CollaborationSidebar({
     isOwner,
     onOpenInviteModal,
     resolveAuthorName,
+    isRealtimeReady,
 }: CollaborationSidebarProps) {
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!isRealtimeReady) return;
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.scrollTop = container.scrollHeight;
+    }, [messages, isRealtimeReady]);
+
+    if (!isRealtimeReady) {
+        return (
+            <aside className="space-y-6">
+                <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-slate-400">
+                    <p>Connexion en cours…</p>
+                </div>
+            </aside>
+        );
+    }
+
     return (
         <aside className="space-y-6">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -107,7 +128,7 @@ export function CollaborationSidebar({
                 </div>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
                         <ChatBubbleLeftRightIcon
@@ -120,32 +141,40 @@ export function CollaborationSidebar({
                         {messages.length}
                     </span>
                 </div>
-                <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+                <div
+                    ref={scrollContainerRef}
+                    className="mt-3 min-h-[220px] flex-1 overflow-y-auto pr-1"
+                >
                     {messagesLoading && !messages.length ? (
                         <div className="space-y-2">
                             <div className="h-16 animate-pulse rounded-md bg-slate-100 dark:bg-gray-700" />
                             <div className="h-16 animate-pulse rounded-md bg-slate-100 dark:bg-gray-700" />
                         </div>
                     ) : messages.length ? (
-                        messages.map((chat) => {
-                            const displayName = resolveAuthorName(chat.user_id);
-                            return (
-                                <div
-                                    key={chat.id}
-                                    className="rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
-                                >
-                                    <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                                            {displayName}
-                                        </span>
-                                        <span>{formatTimestamp(chat.created_at)}</span>
+                        <div className="flex flex-col gap-3">
+                            {messages.map((chat) => {
+                                const displayName = resolveAuthorName(
+                                    chat.user_id,
+                                    chat.authorName ?? chat.authorEmail ?? null
+                                );
+                                return (
+                                    <div
+                                        key={chat.id}
+                                        className="rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900"
+                                    >
+                                        <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                            <span className="font-semibold text-slate-700 dark:text-slate-200">
+                                                {displayName}
+                                            </span>
+                                            <span>{formatTimestamp(chat.created_at)}</span>
+                                        </div>
+                                        <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
+                                            {chat.content}
+                                        </p>
                                     </div>
-                                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
-                                        {chat.content}
-                                    </p>
-                                </div>
-                            );
-                        })
+                                );
+                            })}
+                        </div>
                     ) : (
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                             Aucun message pour le moment.

@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { buildApiUrl } from "@/lib/api";
+import { handleUnauthorized } from "@/lib/auth";
 
 // --- Types et Endpoints ---
 interface User {
@@ -23,6 +25,7 @@ const ADMIN_ENDPOINTS = {
 };
 
 export default function AdminUsersPage() {
+    const router = useRouter();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [notificationMessage, setNotificationMessage] = useState<
@@ -56,7 +59,12 @@ export default function AdminUsersPage() {
                 credentials: "include",
             });
 
-            if (response.status === 401 || response.status === 403) {
+            if (await handleUnauthorized(response, router)) {
+                setUsers([]);
+                return;
+            }
+
+            if (response.status === 403) {
                 handleNotification(
                     "Accès non autorisé. Seuls les administrateurs peuvent voir cette page.",
                     true
@@ -87,7 +95,7 @@ export default function AdminUsersPage() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [router]);
 
     useEffect(() => {
         fetchUsers();
@@ -112,6 +120,17 @@ export default function AdminUsersPage() {
                         credentials: "include",
                     }
                 );
+
+                if (await handleUnauthorized(response, router)) {
+                    setUsers((prevUsers) =>
+                        prevUsers.map((u) =>
+                            u.id === userId
+                                ? { ...u, is_blocked: isBlocked }
+                                : u
+                        )
+                    );
+                    return;
+                }
 
                 if (!response.ok) {
                     setUsers((prevUsers) =>
@@ -147,7 +166,7 @@ export default function AdminUsersPage() {
                 );
             }
         },
-        []
+        [router]
     );
 
     const handleFormChange = (
@@ -170,6 +189,10 @@ export default function AdminUsersPage() {
                 credentials: "include",
                 body: JSON.stringify(newUserData),
             });
+
+            if (await handleUnauthorized(response, router)) {
+                return;
+            }
 
             if (!response.ok) {
                 const body = await response.json().catch(() => ({

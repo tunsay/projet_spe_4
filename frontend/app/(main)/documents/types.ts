@@ -35,6 +35,8 @@ export interface ChatMessageEntry {
     content: string;
     user_id: string;
     created_at: string;
+    authorName?: string | null;
+    authorEmail?: string | null;
 }
 
 export const formatTimestamp = (value: string) => {

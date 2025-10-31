@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { io } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 
@@ -102,62 +102,65 @@ export default function useSocket(documentId: string): UseSocketReturn {
         };
 
     const socketRef = useRef<Socket | null>(null);
+    const [socketState, setSocketState] = useState<Socket | null>(null);
 
     useEffect(() => {
         // Acquire or create the socket for this document
         const socket = acquireSocket(documentId);
         socketRef.current = socket;
+        setSocketState(socket);
 
         return () => {
             // Release the socket for this document when the component unmounts
             socketRef.current = null;
+            setSocketState(null);
             releaseSocket(documentId);
         };
     }, [documentId]);
 
-    const connect = () => {
+    const connect = useCallback(() => {
         try {
             socketRef.current?.connect?.();
         } catch (e) {
             // ignore
         }
-    };
+    }, []);
 
-    const disconnect = () => {
+    const disconnect = useCallback(() => {
         try {
             socketRef.current?.disconnect?.();
         } catch (e) {
             // ignore
         }
-    };
+    }, []);
 
-    const on = (event: string, cb: (...args: any[]) => void) => {
+    const on = useCallback((event: string, cb: (...args: any[]) => void) => {
         try {
             socketRef.current?.on?.(event, cb);
         } catch (e) {
             // ignore
         }
-    };
+    }, []);
 
-    const off = (event: string, cb?: (...args: any[]) => void) => {
+    const off = useCallback((event: string, cb?: (...args: any[]) => void) => {
         try {
             if (cb) socketRef.current?.off?.(event, cb);
             else socketRef.current?.off?.(event as any);
         } catch (e) {
             // ignore
         }
-    };
+    }, []);
 
-    const once = (event: string, cb: (...args: any[]) => void) => {
+    const once = useCallback((event: string, cb: (...args: any[]) => void) => {
         try {
             socketRef.current?.once?.(event, cb);
         } catch (e) {
             // ignore
         }
-    };
+    }, []);
 
     return {
-        socket: socketRef.current,
+        socket: socketState,
         connect,
         disconnect,
         on,

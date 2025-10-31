@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { buildApiUrl } from "@/lib/api";
+import { handleUnauthorized } from "@/lib/auth";
 
 // --- Endpoints ---
 const ENDPOINTS = {
@@ -83,6 +84,8 @@ export default function TwoFAPage() {
             });
 
             if (!response.ok) {
+                await handleUnauthorized(response, router);
+
                 const error: FetchError = new Error(
                     `HTTP Error ${response.status}`
                 );
@@ -96,7 +99,7 @@ export default function TwoFAPage() {
                 // 204 / no content
             }
         },
-        []
+        [router]
     );
 
     useEffect(() => {
@@ -114,7 +117,6 @@ export default function TwoFAPage() {
                 const response = fetchError.response ?? null;
 
                 if (response?.status === 401) {
-                    router.replace("/login");
                     return;
                 }
 
