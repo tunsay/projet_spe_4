@@ -76,6 +76,11 @@ export default function ProfilePage() {
     const [newName, setNewName] = useState("");
     const [isNameLoading, setIsNameLoading] = useState(false);
 
+    // États pour la modification de l'email
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+    const [newEmail, setNewEmail] = useState("");
+    const [isEmailLoading, setIsEmailLoading] = useState(false);
+
     // États pour la modification du mot de passe
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [newPassword, setNewPassword] = useState("");
@@ -312,6 +317,77 @@ export default function ProfilePage() {
         [newName, profile, router]
     );
 
+    const handleUpdateEmail = useCallback(
+        async (e: React.FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            setIsEmailLoading(true);
+            setPageError("");
+            setUpdateSuccess("");
+
+            if (!newEmail?.trim()) {
+                setPageError("L'email ne peut pas être vide.");
+                setIsEmailLoading(false);
+                return;
+            }
+
+            // Validation de l'email côté client
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(newEmail.trim())) {
+                setPageError("Format d'email invalide.");
+                setIsEmailLoading(false);
+                return;
+            }
+
+            let response: Response | null = null;
+
+            try {
+                response = await fetch(ENDPOINTS.UPDATE, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ email: newEmail.trim() }),
+                });
+
+                if (await handleUnauthorized(response, router)) {
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(
+                        response,
+                        null
+                    );
+                    setPageError(errorMessage);
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (profile) {
+                    const updatedProfile: UserProfile = {
+                        ...profile,
+                        email: data.email || profile.email,
+                    };
+                    setProfile(updatedProfile);
+                }
+
+                setUpdateSuccess("Email mis à jour avec succès !");
+                setNewEmail("");
+                setIsEmailModalOpen(false);
+                
+                // Déclencher un événement pour rafraîchir le Header
+                globalThis.dispatchEvent(new CustomEvent('profile-updated'));
+            } catch (err) {
+                console.error("Erreur de mise à jour de l'email:", err);
+                const errorMessage = await extractErrorMessage(response, err);
+                setPageError(errorMessage);
+            } finally {
+                setIsEmailLoading(false);
+            }
+        },
+        [newEmail, profile, router]
+    );
+
     const handleUpdatePassword = useCallback(
         async (e: React.FormEvent<HTMLFormElement>) => {
             e.preventDefault();
@@ -449,6 +525,16 @@ export default function ProfilePage() {
                             className="bg-indigo-600 hover:bg-indigo-700 shadow-md px-4 py-2.5 rounded-lg font-semibold text-white transition duration-150"
                         >
                             ✏️ Changer le nom
+                        </button>
+                        <button
+                            onClick={() => {
+                                setIsEmailModalOpen(true);
+                                setPageError("");
+                                setUpdateSuccess("");
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 shadow-md px-4 py-2.5 rounded-lg font-semibold text-white transition duration-150"
+                        >
+                            📧 Changer l&apos;email
                         </button>
                         <button
                             onClick={() => {
@@ -608,6 +694,59 @@ export default function ProfilePage() {
                                         className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-md px-4 py-2 rounded-lg font-semibold text-white transition duration-150 disabled:cursor-not-allowed"
                                     >
                                         {isNameLoading
+                                            ? "Modification..."
+                                            : "Confirmer"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modale - Changer l'email */}
+                {isEmailModalOpen && (
+                    <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/50">
+                        <div className="bg-white dark:bg-gray-800 shadow-2xl mx-4 p-6 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-md">
+                            <h2 className="mb-4 font-bold text-gray-900 dark:text-gray-100 text-xl">
+                                Changer l&apos;email
+                            </h2>
+                            <form onSubmit={handleUpdateEmail} className="space-y-4">
+                                <div>
+                                    <label
+                                        htmlFor="modalNewEmail"
+                                        className="block mb-2 font-medium text-gray-700 dark:text-gray-300 text-sm"
+                                    >
+                                        Nouvel email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        id="modalNewEmail"
+                                        value={newEmail}
+                                        onChange={(e) => setNewEmail(e.target.value)}
+                                        placeholder={profile.email}
+                                        required
+                                        autoFocus
+                                        className="bg-white dark:bg-gray-900 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsEmailModalOpen(false);
+                                            setNewEmail("");
+                                            setPageError("");
+                                        }}
+                                        className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 px-4 py-2 rounded-lg font-medium text-gray-800 dark:text-gray-100 transition duration-150"
+                                    >
+                                        Annuler
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isEmailLoading}
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-md px-4 py-2 rounded-lg font-semibold text-white transition duration-150 disabled:cursor-not-allowed"
+                                    >
+                                        {isEmailLoading
                                             ? "Modification..."
                                             : "Confirmer"}
                                     </button>

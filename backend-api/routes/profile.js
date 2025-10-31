@@ -35,7 +35,7 @@ router.get("/", userController.getUserProfile);
  * @openapi
  * /profile:
  *   put:
- *     summary: Met à jour le profil (nom, mot de passe)
+ *     summary: Met à jour le profil (nom, email, mot de passe)
  *     tags:
  *       - Profile
  *     security:
@@ -50,6 +50,10 @@ router.get("/", userController.getUserProfile);
  *               name:
  *                 type: string
  *                 description: Nouveau nom d'affichage
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Nouvel email
  *               password:
  *                 type: string
  *                 minLength: 8
@@ -75,6 +79,8 @@ router.get("/", userController.getUserProfile);
  *         description: Requête invalide
  *       '401':
  *         description: Non autorisé
+ *       '409':
+ *         description: Email déjà utilisé
  */
 router.put("/", auth, userController.updateUserProfile);
 

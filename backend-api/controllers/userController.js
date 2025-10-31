@@ -170,11 +170,11 @@ const disableTwoFactor = async (req, res) => {
 };
 
 /**
- * Met à jour le profil de l'utilisateur (nom, mot de passe)
+ * Met à jour le profil de l'utilisateur (nom, email, mot de passe)
  */
 const updateUserProfile = async (req, res) => {
     const userId = req.userId;
-    const { name, password } = req.body;
+    const { name, email, password } = req.body;
 
     try {
         const user = await User.findByPk(userId);
@@ -184,16 +184,44 @@ const updateUserProfile = async (req, res) => {
         }
 
         // Valider les champs
-        if (!name && !password) {
+        if (!name && !email && !password) {
             return res
                 .status(400)
-                .json({ message: "Nom ou mot de passe requis." });
+                .json({ message: "Au moins un champ doit être fourni (nom, email ou mot de passe)." });
         }
 
         if (name && name.trim().length === 0) {
             return res
                 .status(400)
                 .json({ message: "Le nom ne peut pas être vide." });
+        }
+
+        // Validation de l'email
+        if (email) {
+            if (email.trim().length === 0) {
+                return res
+                    .status(400)
+                    .json({ message: "L'email ne peut pas être vide." });
+            }
+
+            // Regex de validation d'email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res
+                    .status(400)
+                    .json({ message: "Format d'email invalide." });
+            }
+
+            // Vérifier si l'email est déjà utilisé par un autre utilisateur
+            const existingUser = await User.findOne({
+                where: { email: email.trim() }
+            });
+
+            if (existingUser && existingUser.id !== userId) {
+                return res
+                    .status(409)
+                    .json({ message: "Cet email est déjà utilisé par un autre utilisateur." });
+            }
         }
 
         if (password && password.length < 8) {
@@ -208,6 +236,11 @@ const updateUserProfile = async (req, res) => {
         // Mettre à jour le nom
         if (name) {
             user.display_name = name;
+        }
+
+        // Mettre à jour l'email
+        if (email) {
+            user.email = email.trim();
         }
 
         // Mettre à jour le mot de passe
