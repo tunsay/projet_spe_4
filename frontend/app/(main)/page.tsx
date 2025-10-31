@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 export default function Page() {
     return (
@@ -18,12 +19,12 @@ export default function Page() {
                     </p>
                     <div className="mt-8 flex flex-wrap gap-4">
                         {/* Bouton Primaire (Accéder aux documents) */}
-                        <a
+                        <Link
                             href="/documents"
                             className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 transition duration-150"
                         >
                             Accéder aux documents
-                        </a>
+                        </Link>
                         {/* Bouton Secondaire (Gérer mon profil) */}
                         <a
                             href="/profile"

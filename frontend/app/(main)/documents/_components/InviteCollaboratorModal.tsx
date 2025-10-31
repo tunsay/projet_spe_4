@@ -54,8 +54,8 @@ export function InviteCollaboratorModal({
                     </div>
                     <form className="space-y-4 px-5 py-4" onSubmit={onSubmit}>
                         <p className="text-sm text-slate-600 dark:text-slate-300">
-                            Partagez ce document avec un membre de votre équipe et
-                            définissez son niveau d&apos;accès.
+                            Partagez ce document avec un membre de votre équipe
+                            et définissez son niveau d&apos;accès.
                         </p>
                         {inviteFeedback && (
                             <div
@@ -74,7 +74,9 @@ export function InviteCollaboratorModal({
                                 type="email"
                                 required
                                 value={inviteEmail}
-                                onChange={(event) => onEmailChange(event.target.value)}
+                                onChange={(event) =>
+                                    onEmailChange(event.target.value)
+                                }
                                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
                                 placeholder="collaborateur@exemple.com"
                             />
@@ -111,7 +113,9 @@ export function InviteCollaboratorModal({
                                 disabled={inviteLoading}
                                 className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition duration-150 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                {inviteLoading ? "Envoi…" : "Envoyer l&apos;invitation"}
+                                {inviteLoading
+                                    ? "Envoi…"
+                                    : "Envoyer l'invitation"}
                             </button>
                         </div>
                     </form>
