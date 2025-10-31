@@ -18,7 +18,7 @@ type DocChangeEvent = {
     author?: string;
 };
 
-export default function useRoomDocument(socket: Socket | null, documentId: string) {
+export default function useRoomDocument(socket: Socket | null, documentId: string | null) {
     const [joined, setJoined] = useState(false);
     const [initialState, setInitialState] = useState<InitialState | null>(null);
     const [membersCount, setMembersCount] = useState<number>(0);
@@ -212,7 +212,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         if (!ctx) return;
 
         if (ctx.state === "suspended") {
-            ctx.resume().catch(() => {});
+            ctx.resume().catch(() => { });
         }
 
         try {
@@ -242,7 +242,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             if (ctx) {
                 try {
                     if (ctx.state !== "closed") {
-                        ctx.close().catch(() => {});
+                        ctx.close().catch(() => { });
                     }
                 } catch (error) {
                     // ignore cleanup errors
@@ -299,9 +299,11 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         };
 
         // Prepare a join emitter that will run immediately if connected,
-        // or once on the next "connect" event. Also ensure the socket is
-        // connected when this hook is used on a page.
+        // or once on the next "connect" event. If there is no documentId
+        // then we MUST NOT try to join — the hook can be initialized before
+        // an id is available.
         const tryJoin = () => {
+            if (!documentId) return; // do not join when no id
             try {
                 socket.emit(
                     "join-document",
@@ -313,6 +315,18 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             }
         };
 
+        const tryUnjoin = (reason: any) => {
+            if (!documentId) return; // do not unjoin when no id
+            try {
+                socket.emit("leave-document", { docId: documentId }, (response: any) => {
+                    setJoined(false);
+                    setJoinError(typeof reason === "string" ? reason : "disconnected");
+                });
+            } catch (e) {
+                console.error("Error emitting leave-document", e);
+            }
+        }
+
         // Rejoin on every successful connect (initial or reconnection)
         const handleConnect = () => {
             tryJoin();
@@ -321,16 +335,15 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         const handleDisconnect = (reason: any) => {
             if (!mounted) return;
             // mark as not joined; we'll try to rejoin on next connect
-            setJoined(false);
-            setJoinError(typeof reason === "string" ? reason : "disconnected");
+            tryUnjoin(reason);
         };
 
         if (socket && socket.connected) {
-            tryJoin();
+            if (documentId) tryJoin();
         } else {
-            // ensure the socket attempts to connect
+            // only attempt to connect if we have a document to join
             try {
-                socket.connect();
+                if (documentId) socket.connect();
             } catch (e) {
                 // some socket implementations may throw; ignore here
             }
@@ -348,6 +361,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         socket.on("disconnect", handleDisconnect);
 
         return () => {
+            handleDisconnect("disconnect");
             mounted = false;
             try {
                 socket.off("message", handlePossibleJoinPayload);
@@ -366,6 +380,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     const sendChange = useCallback(
         (delta: any) => {
             if (!socket) return Promise.reject(new Error("no-socket"));
+            if (!documentId) return Promise.reject(new Error("no-doc"));
             return new Promise<void>((resolve, reject) => {
                 try {
                     socket.emit(
@@ -426,9 +441,9 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         if (!emoji || typeof emoji !== "string") return;
         const normalizedUsers = Array.isArray(userIds)
             ? userIds.filter(
-                  (entry): entry is string =>
-                      typeof entry === "string" && entry.length > 0
-              )
+                (entry): entry is string =>
+                    typeof entry === "string" && entry.length > 0
+            )
             : [];
         applyReactionDiff(String(messageId), emoji, normalizedUsers);
     };
@@ -439,6 +454,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             fallbackId: string
         ): Promise<ChatMessageEntry> => {
             if (!socket) return Promise.reject(new Error("no-socket"));
+            if (!documentId) return Promise.reject(new Error("no-doc"));
 
             return new Promise<ChatMessageEntry>((resolve, reject) => {
                 let optimisticKey: string | null = null;
@@ -524,6 +540,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     const toggleReaction = useCallback(
         (messageId: string | number, emoji: string) => {
             if (!socket) return Promise.reject(new Error("no-socket"));
+            if (!documentId) return Promise.reject(new Error("no-doc"));
             const messageKey = String(messageId);
             const emojiKey = String(emoji);
             return new Promise<{
@@ -545,10 +562,10 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
                                     reactionPayload?.userIds
                                 )
                                     ? (reactionPayload.userIds as unknown[]).filter(
-                                          (entry): entry is string =>
-                                              typeof entry === "string" &&
-                                              entry.length > 0
-                                      )
+                                        (entry): entry is string =>
+                                            typeof entry === "string" &&
+                                            entry.length > 0
+                                    )
                                     : [];
                                 applyReactionDiff(messageKey, emojiKey, userIds);
                                 return resolve({

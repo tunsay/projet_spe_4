@@ -184,6 +184,71 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("leave-document", async ({ docId }, cb) => {
+        try {
+            if (!docId) {
+                console.log(
+                    "user",
+                    socket.id,
+                    "user:",
+                    socket.user?.id,
+                    "leaving doc: missing docId"
+                );
+                return respond({ ok: false, reason: "missing_docId" }, cb);
+            }
+
+            const room = `document:${docId}`;
+            if (!socket.rooms.has(room)) {
+                console.log(
+                    "user",
+                    socket.id,
+                    "user:",
+                    socket.user?.id,
+                    "leave-document - not joined",
+                    room
+                );
+                return respond({ ok: false, reason: "not_joined" }, cb);
+            }
+
+            await socket.leave(room);
+
+            const clients = io.sockets.adapter.rooms.get(room);
+            const membersCount = clients ? clients.size : 0;
+
+            // Notify other members that this socket left
+            socket.to(room).emit("presence", {
+                type: "left",
+                userId: socket.user?.id,
+                socketId: socket.id,
+                membersCount,
+            });
+
+            console.log(
+                "user",
+                socket.id,
+                "user:",
+                socket.user?.id,
+                "left doc:",
+                docId,
+                "membersCount:",
+                membersCount
+            );
+
+            return respond(
+                {
+                    ok: true,
+                    docId,
+                    membersCount,
+                    reactions: serializeDocumentReactions(docId),
+                },
+                cb
+            );
+        } catch (error) {
+            console.error("Error in leave-document:", error);
+            return respond({ ok: false, reason: "internal_error" }, cb);
+        }
+    });
+
     // Exemple d'édition (diff/delta)
     socket.on("doc-change", async ({ docId, delta }, cb) => {
         try {

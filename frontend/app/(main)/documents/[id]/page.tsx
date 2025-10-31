@@ -19,7 +19,7 @@ import { DocumentTextSection } from "../_components/DocumentTextSection";
 import { DocumentSummarySection } from "../_components/DocumentSummarySection";
 import { CollaborationSidebar } from "../_components/CollaborationSidebar";
 import { InviteCollaboratorModal } from "../_components/InviteCollaboratorModal";
-import { useSocketContext } from "@/provider/socket.tsx";
+import { useSocketContext } from "@/provider/socket";
 import {
     DocumentDetail,
     FeedbackMessage,

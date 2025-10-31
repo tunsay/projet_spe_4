@@ -29,7 +29,9 @@ export default function RootLayout({
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased`}
             >
-                <SocketProvider><Root>{children}</Root></SocketProvider>
+                <SocketProvider>
+                    <Root>{children}</Root>
+                </SocketProvider>
             </body>
         </html>
     );
