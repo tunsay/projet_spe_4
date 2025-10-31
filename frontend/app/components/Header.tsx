@@ -89,6 +89,17 @@ export default function Header() {
         };
 
         checkAuth();
+
+        // Écouter les mises à jour du profil
+        const handleProfileUpdate = () => {
+            checkAuth();
+        };
+
+        globalThis.addEventListener('profile-updated', handleProfileUpdate);
+
+        return () => {
+            globalThis.removeEventListener('profile-updated', handleProfileUpdate);
+        };
     }, [hideHeader, router]);
 
     const displayName = profile?.name || profile?.email || "Utilisateur";
@@ -100,15 +111,15 @@ export default function Header() {
 
     // --- Rendu ---
     return (
-        <header className="sticky top-0 z-20 border-b bg-white/70 backdrop-blur supports-backdrop-filter:bg-white/60">
-            <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
+        <header className="top-0 z-20 sticky bg-white/70 supports-backdrop-filter:bg-white/60 backdrop-blur border-b">
+            <div className="flex justify-between items-center mx-auto px-4 max-w-6xl h-14">
                 <nav className="flex items-center gap-4">
                     <Link href="/" className="font-semibold">
                         WikiDrive
                     </Link>
                     <Link
                         href="/documents"
-                        className="text-sm text-slate-600 hover:text-slate-900"
+                        className="text-slate-600 hover:text-slate-900 text-sm"
                     >
                         Documents
                     </Link>
@@ -117,7 +128,7 @@ export default function Header() {
                     {isAdmin && (
                         <Link
                             href="/admin"
-                            className="text-sm text-indigo-600 font-medium hover:text-indigo-900 transition-colors duration-150"
+                            className="font-medium text-indigo-600 hover:text-indigo-900 text-sm transition-colors duration-150"
                         >
                             Administration
                         </Link>
@@ -125,21 +136,21 @@ export default function Header() {
                 </nav>
 
                 {loading ? (
-                    <span className="text-sm text-slate-500">
+                    <span className="text-slate-500 text-sm">
                         Chargement...
                     </span>
                 ) : (
                     <div className="flex items-center gap-3">
                         {error ? (
                             <span
-                                className="text-sm text-red-600"
+                                className="text-red-600 text-sm"
                                 title={error}
                             >
                                 Erreur ❌
                             </span>
                         ) : profile ? (
                             <>
-                                <span className="text-sm text-slate-700">
+                                <span className="text-slate-700 text-sm">
                                     {displayName}{" "}
                                     {profile.name && (
                                         <span className="text-slate-400">
@@ -149,13 +160,13 @@ export default function Header() {
                                 </span>
                                 <Link
                                     href="/profile"
-                                    className="text-sm px-3 py-1.5 rounded-md border hover:bg-slate-50"
+                                    className="hover:bg-slate-50 px-3 py-1.5 border rounded-md text-sm"
                                 >
                                     Profil
                                 </Link>
                                 <button
                                     onClick={handleLogout}
-                                    className="text-sm px-3 py-1.5 rounded-md bg-slate-900 text-white hover:opacity-90"
+                                    className="bg-slate-900 hover:opacity-90 px-3 py-1.5 rounded-md text-white text-sm"
                                 >
                                     Déconnexion
                                 </button>
@@ -163,7 +174,7 @@ export default function Header() {
                         ) : (
                             <Link
                                 href="/login"
-                                className="text-sm px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+                                className="bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-md text-white text-sm"
                             >
                                 Connexion
                             </Link>

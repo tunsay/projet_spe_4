@@ -71,12 +71,17 @@ export default function ProfilePage() {
     const [isDisableLoading, setIsDisableLoading] = useState(false);
     const [pageError, setPageError] = useState("");
 
-    // États pour la mise à jour du profil
-    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    // États pour la modification du nom
+    const [isNameModalOpen, setIsNameModalOpen] = useState(false);
     const [newName, setNewName] = useState("");
+    const [isNameLoading, setIsNameLoading] = useState(false);
+
+    // États pour la modification du mot de passe
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+    const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+
     const [updateSuccess, setUpdateSuccess] = useState("");
 
     // --- LOGIQUE DE CHARGEMENT INITIAL ---
@@ -244,50 +249,27 @@ export default function ProfilePage() {
         }
     }, [profile, router]);
 
-    const handleUpdateProfile = useCallback(
+    const handleUpdateName = useCallback(
         async (e: React.FormEvent<HTMLFormElement>) => {
             e.preventDefault();
-            setIsUpdateLoading(true);
+            setIsNameLoading(true);
             setPageError("");
             setUpdateSuccess("");
 
-            // Validation côté client
-            if (!newName && !newPassword) {
-                setPageError("Veuillez renseigner au moins un champ à modifier.");
-                setIsUpdateLoading(false);
-                return;
-            }
-
-            if (newName && newName.trim().length === 0) {
+            if (!newName?.trim()) {
                 setPageError("Le nom ne peut pas être vide.");
-                setIsUpdateLoading(false);
-                return;
-            }
-
-            if (newPassword && newPassword.length < 8) {
-                setPageError("Le mot de passe doit contenir au minimum 8 caractères.");
-                setIsUpdateLoading(false);
-                return;
-            }
-
-            if (newPassword && newPassword !== confirmPassword) {
-                setPageError("Les mots de passe ne correspondent pas.");
-                setIsUpdateLoading(false);
+                setIsNameLoading(false);
                 return;
             }
 
             let response: Response | null = null;
 
             try {
-                const body: { name?: string; password?: string } = {};
-                if (newName?.trim()) body.name = newName.trim();
-                if (newPassword) body.password = newPassword;
-
                 response = await fetch(ENDPOINTS.UPDATE, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify(body),
+                    body: JSON.stringify({ name: newName.trim() }),
                 });
 
                 if (await handleUnauthorized(response, router)) {
@@ -304,8 +286,7 @@ export default function ProfilePage() {
                 }
 
                 const data = await response.json();
-                
-                // Mettre à jour le profil avec les nouvelles données
+
                 if (profile) {
                     const updatedProfile: UserProfile = {
                         ...profile,
@@ -314,20 +295,86 @@ export default function ProfilePage() {
                     setProfile(updatedProfile);
                 }
 
-                setUpdateSuccess("Profil mis à jour avec succès !");
+                setUpdateSuccess("Nom mis à jour avec succès !");
                 setNewName("");
-                setNewPassword("");
-                setConfirmPassword("");
-                setIsEditingProfile(false);
+                setIsNameModalOpen(false);
+                
+                // Déclencher un événement pour rafraîchir le Header
+                globalThis.dispatchEvent(new CustomEvent('profile-updated'));
             } catch (err) {
-                console.error("Erreur de mise à jour du profil:", err);
+                console.error("Erreur de mise à jour du nom:", err);
                 const errorMessage = await extractErrorMessage(response, err);
                 setPageError(errorMessage);
             } finally {
-                setIsUpdateLoading(false);
+                setIsNameLoading(false);
             }
         },
-        [newName, newPassword, confirmPassword, profile, router]
+        [newName, profile, router]
+    );
+
+    const handleUpdatePassword = useCallback(
+        async (e: React.FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+            setIsPasswordLoading(true);
+            setPageError("");
+            setUpdateSuccess("");
+
+            if (!newPassword) {
+                setPageError("Le mot de passe ne peut pas être vide.");
+                setIsPasswordLoading(false);
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                setPageError(
+                    "Le mot de passe doit contenir au minimum 8 caractères."
+                );
+                setIsPasswordLoading(false);
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                setPageError("Les mots de passe ne correspondent pas.");
+                setIsPasswordLoading(false);
+                return;
+            }
+
+            let response: Response | null = null;
+
+            try {
+                response = await fetch(ENDPOINTS.UPDATE, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ password: newPassword }),
+                });
+
+                if (await handleUnauthorized(response, router)) {
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(
+                        response,
+                        null
+                    );
+                    setPageError(errorMessage);
+                    return;
+                }
+
+                setUpdateSuccess("Mot de passe mis à jour avec succès !");
+                setNewPassword("");
+                setConfirmPassword("");
+                setIsPasswordModalOpen(false);
+            } catch (err) {
+                console.error("Erreur de mise à jour du mot de passe:", err);
+                const errorMessage = await extractErrorMessage(response, err);
+                setPageError(errorMessage);
+            } finally {
+                setIsPasswordLoading(false);
+            }
+        },
+        [newPassword, confirmPassword, router]
     );
 
     // --- Retours Anticipés ---
@@ -391,95 +438,28 @@ export default function ProfilePage() {
                         </li>
                     </ul>
 
-                    {/* Section de modification du profil */}
-                    <div className="bg-gray-50 dark:bg-gray-700 mb-6 p-5 border border-gray-300 dark:border-gray-600 rounded-lg">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="font-semibold text-gray-900 dark:text-gray-100 text-xl">
-                                Modifier mon profil
-                            </h2>
-                            <button
-                                onClick={() => {
-                                    setIsEditingProfile(!isEditingProfile);
-                                    setPageError("");
-                                    setUpdateSuccess("");
-                                    setNewName("");
-                                    setNewPassword("");
-                                    setConfirmPassword("");
-                                }}
-                                className="font-medium text-indigo-600 hover:text-indigo-700 dark:hover:text-indigo-300 dark:text-indigo-400 text-sm"
-                            >
-                                {isEditingProfile ? "Annuler" : "Modifier"}
-                            </button>
-                        </div>
-
-                        {isEditingProfile && (
-                            <form onSubmit={handleUpdateProfile} className="space-y-4">
-                                <div>
-                                    <label
-                                        htmlFor="newName"
-                                        className="block mb-1 font-medium text-gray-700 dark:text-gray-300 text-sm"
-                                    >
-                                        Nouveau nom (optionnel)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="newName"
-                                        value={newName}
-                                        onChange={(e) => setNewName(e.target.value)}
-                                        placeholder={profile.name}
-                                        className="bg-white dark:bg-gray-800 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label
-                                        htmlFor="newPassword"
-                                        className="block mb-1 font-medium text-gray-700 dark:text-gray-300 text-sm"
-                                    >
-                                        Nouveau mot de passe (optionnel)
-                                    </label>
-                                    <input
-                                        type="password"
-                                        id="newPassword"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="Minimum 8 caractères"
-                                        className="bg-white dark:bg-gray-800 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
-                                    />
-                                </div>
-
-                                {newPassword && (
-                                    <div>
-                                        <label
-                                            htmlFor="confirmPassword"
-                                            className="block mb-1 font-medium text-gray-700 dark:text-gray-300 text-sm"
-                                        >
-                                            Confirmer le mot de passe
-                                        </label>
-                                        <input
-                                            type="password"
-                                            id="confirmPassword"
-                                            value={confirmPassword}
-                                            onChange={(e) =>
-                                                setConfirmPassword(e.target.value)
-                                            }
-                                            placeholder="Confirmer le mot de passe"
-                                            className="bg-white dark:bg-gray-800 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
-                                        />
-                                    </div>
-                                )}
-
-                                <button
-                                    type="submit"
-                                    disabled={isUpdateLoading}
-                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-md px-4 py-2.5 rounded-lg w-full font-semibold text-white transition duration-150 disabled:cursor-not-allowed"
-                                >
-                                    {isUpdateLoading
-                                        ? "Mise à jour..."
-                                        : "Enregistrer les modifications"}
-                                </button>
-                            </form>
-                        )}
+                    {/* Boutons d'actions sur le profil */}
+                    <div className="flex flex-wrap gap-3 mb-6">
+                        <button
+                            onClick={() => {
+                                setIsNameModalOpen(true);
+                                setPageError("");
+                                setUpdateSuccess("");
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 shadow-md px-4 py-2.5 rounded-lg font-semibold text-white transition duration-150"
+                        >
+                            ✏️ Changer le nom
+                        </button>
+                        <button
+                            onClick={() => {
+                                setIsPasswordModalOpen(true);
+                                setPageError("");
+                                setUpdateSuccess("");
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 shadow-md px-4 py-2.5 rounded-lg font-semibold text-white transition duration-150"
+                        >
+                            🔒 Changer le mot de passe
+                        </button>
                     </div>
 
                     <h2 className="mb-3 font-semibold text-gray-900 dark:text-gray-100 text-xl">
@@ -583,6 +563,137 @@ export default function ProfilePage() {
                         </button>
                     )}
                 </div>
+
+                {/* Modale - Changer le nom */}
+                {isNameModalOpen && (
+                    <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/50">
+                        <div className="bg-white dark:bg-gray-800 shadow-2xl mx-4 p-6 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-md">
+                            <h2 className="mb-4 font-bold text-gray-900 dark:text-gray-100 text-xl">
+                                Changer le nom
+                            </h2>
+                            <form onSubmit={handleUpdateName} className="space-y-4">
+                                <div>
+                                    <label
+                                        htmlFor="modalNewName"
+                                        className="block mb-2 font-medium text-gray-700 dark:text-gray-300 text-sm"
+                                    >
+                                        Nouveau nom
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="modalNewName"
+                                        value={newName}
+                                        onChange={(e) => setNewName(e.target.value)}
+                                        placeholder={profile.name}
+                                        required
+                                        autoFocus
+                                        className="bg-white dark:bg-gray-900 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsNameModalOpen(false);
+                                            setNewName("");
+                                            setPageError("");
+                                        }}
+                                        className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 px-4 py-2 rounded-lg font-medium text-gray-800 dark:text-gray-100 transition duration-150"
+                                    >
+                                        Annuler
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isNameLoading}
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-md px-4 py-2 rounded-lg font-semibold text-white transition duration-150 disabled:cursor-not-allowed"
+                                    >
+                                        {isNameLoading
+                                            ? "Modification..."
+                                            : "Confirmer"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modale - Changer le mot de passe */}
+                {isPasswordModalOpen && (
+                    <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/50">
+                        <div className="bg-white dark:bg-gray-800 shadow-2xl mx-4 p-6 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-md">
+                            <h2 className="mb-4 font-bold text-gray-900 dark:text-gray-100 text-xl">
+                                Changer le mot de passe
+                            </h2>
+                            <form
+                                onSubmit={handleUpdatePassword}
+                                className="space-y-4"
+                            >
+                                <div>
+                                    <label
+                                        htmlFor="modalNewPassword"
+                                        className="block mb-2 font-medium text-gray-700 dark:text-gray-300 text-sm"
+                                    >
+                                        Nouveau mot de passe
+                                    </label>
+                                    <input
+                                        type="password"
+                                        id="modalNewPassword"
+                                        value={newPassword}
+                                        onChange={(e) =>
+                                            setNewPassword(e.target.value)
+                                        }
+                                        placeholder="Minimum 8 caractères"
+                                        required
+                                        autoFocus
+                                        className="bg-white dark:bg-gray-900 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        htmlFor="modalConfirmPassword"
+                                        className="block mb-2 font-medium text-gray-700 dark:text-gray-300 text-sm"
+                                    >
+                                        Confirmer le mot de passe
+                                    </label>
+                                    <input
+                                        type="password"
+                                        id="modalConfirmPassword"
+                                        value={confirmPassword}
+                                        onChange={(e) =>
+                                            setConfirmPassword(e.target.value)
+                                        }
+                                        placeholder="Confirmer le mot de passe"
+                                        required
+                                        className="bg-white dark:bg-gray-900 px-3 py-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full text-gray-900 dark:text-gray-100 transition duration-150"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsPasswordModalOpen(false);
+                                            setNewPassword("");
+                                            setConfirmPassword("");
+                                            setPageError("");
+                                        }}
+                                        className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 px-4 py-2 rounded-lg font-medium text-gray-800 dark:text-gray-100 transition duration-150"
+                                    >
+                                        Annuler
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isPasswordLoading}
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 shadow-md px-4 py-2 rounded-lg font-semibold text-white transition duration-150 disabled:cursor-not-allowed"
+                                    >
+                                        {isPasswordLoading
+                                            ? "Modification..."
+                                            : "Confirmer"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </div>
         </main>
     );
