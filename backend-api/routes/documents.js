@@ -895,10 +895,10 @@ router.delete("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const owner_id = req.userId;
+    const user_id = req.userId;
     const { content } = req.body;
 
-    if (!owner_id) {
+    if (!user_id) {
       return res.status(401).json({ error: "User ID requis (header: user-id)" });
     }
 
@@ -908,7 +908,7 @@ router.put("/:id", async (req, res) => {
 
     // Valider UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(owner_id)) {
+    if (!uuidRegex.test(user_id)) {
       return res.status(400).json({ error: "User ID invalide (doit être un UUID)" });
     }
 
@@ -947,7 +947,7 @@ router.put("/:id", async (req, res) => {
        SET content = $1, last_modified_by_id = $2, last_modified_at = NOW()
        WHERE id = $3
        RETURNING id, name, type, owner_id, parent_id, content, last_modified_at`,
-      [content, owner_id, id]
+      [content, user_id, id]
     );
 
     const document = result.rows[0];
