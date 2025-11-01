@@ -15,6 +15,10 @@ type SocketEntry = {
 let globalSocketEntry: SocketEntry | null = null;
 
 const createSocket = (): Socket => {
+    const token = window.localStorage.getItem("collaboratif_token");
+    if(!token){
+        throw new Error("Token not found");
+    }
     const socket = io(process.env.NEXT_PUBLIC_WS_URL, {
         transports: ["websocket"],
         auth: {
@@ -36,7 +40,7 @@ const createSocket = (): Socket => {
     return socket;
 };
 
-const acquireGlobalSocket = (): SocketIO => {
+const acquireGlobalSocket = (): SocketIO | null => {
     if (globalSocketEntry) {
         globalSocketEntry.refs += 1;
         if (globalSocketEntry.pendingClose) {
@@ -45,10 +49,13 @@ const acquireGlobalSocket = (): SocketIO => {
         }
         return globalSocketEntry.socket;
     }
-
-    const socket = createSocket();
-    globalSocketEntry = { socket, refs: 1 };
-    return socket;
+    try{
+        const socket = createSocket();
+        return socket;
+    } catch (e){
+        console.error("Erreur lors de la création du socket", (e as Error).message)
+        return null;
+    }
 };
 
 const releaseGlobalSocket = () => {
@@ -104,17 +111,13 @@ export default function useSocket(): UseSocketReturn {
         const socket = acquireGlobalSocket();
         socketRef.current = socket;
         setSocketState(socket);
-
-        return () => {
-            // Release the global socket when this hook consumer unmounts
-            socketRef.current = null;
-            setSocketState(null);
-            releaseGlobalSocket();
-        };
     }, []); // important: do not depend on documentId here
 
     const connect = useCallback(() => {
         try {
+            const socket = createSocket();
+            socketRef.current = socket;
+            setSocketState(socket);
             socketRef.current?.connect?.();
         } catch (e) {
             // ignore
@@ -124,6 +127,9 @@ export default function useSocket(): UseSocketReturn {
     const disconnect = useCallback(() => {
         try {
             socketRef.current?.disconnect?.();
+            socketRef.current = null;
+            setSocketState(null);
+            releaseGlobalSocket();
         } catch (e) {
             // ignore
         }

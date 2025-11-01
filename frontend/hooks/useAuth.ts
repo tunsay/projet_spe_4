@@ -8,7 +8,7 @@ export const useAuth = () => {
         const handleLogin = (event: Event) => {
             const e = event as CustomEvent;
             console.log('user:login', e.detail);
-            connect();
+            connect();          
         };
 
         const handleLogout = (event: Event) => {
