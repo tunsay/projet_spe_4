@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildApiUrl } from "@/lib/api";
-import { useSocketContext } from "@/provider/socket";
 
 const LOGIN_ENDPOINT = buildApiUrl("/api/auth/login");
 

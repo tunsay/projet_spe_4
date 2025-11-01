@@ -5,9 +5,9 @@ const bcrypt = require("bcryptjs");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
-const COOKIE_SECURE = process.env.COOKIE_SECURE === "true";
+const COOKIE_SECURE = process.env.COOKIE_SECURE === "false" ? false : true;
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
-const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || "Lax";
+const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || "None";
 const TOKEN_TTL = process.env.JWT_TTL || "1h";
 
 function signJwt(payload) {
@@ -108,7 +108,7 @@ exports.postLogin = async (req, res) => {
         const token = jwt.sign(
             { userEmail: user.email, userId: user.id },
             process.env.JWT_SECRET,
-            { expiresIn: "1h" }
+            { expiresIn: TOKEN_TTL }
         );
 
         // Définir le cookie
