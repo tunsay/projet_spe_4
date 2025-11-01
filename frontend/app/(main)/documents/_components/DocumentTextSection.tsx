@@ -36,7 +36,9 @@ export function DocumentTextSection({
                 <label className="block text-sm font-medium text-slate-600 dark:text-slate-300">
                     Contenu du document
                     <textarea
-                        ref={(ref) => (textareaRef.current = ref)}
+                        ref={(ref) => {
+                            textareaRef.current = ref;
+                        }}
                         value={content}
                         onChange={(event) => onContentChange(event.target.value, event.target.selectionStart, event.target.selectionEnd, event.target.selectionDirection)}
                         onSelect={(event) => setCurrentSelection({
