@@ -26,7 +26,7 @@ export function DocumentTextSection({
         }
         const textarea = textareaRef.current;
         if (textarea) {
-            textarea.setSelectionRange(selection.end, selection.end);
+            textarea.setSelectionRange(selection.start, selection.end);
         }
     }, [content]);
 
