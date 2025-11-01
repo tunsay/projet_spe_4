@@ -1464,7 +1464,7 @@ router.post("/:id/invite", async (req, res) => {
 
     // Vérifier que le document existe et appartient à l'utilisateur
     const docCheck = await pool.query(
-      `SELECT owner_id FROM "documents" WHERE id = $1`,
+      `SELECT * FROM "documents" WHERE id = $1`,
       [id]
     );
 
@@ -1509,6 +1509,23 @@ router.post("/:id/invite", async (req, res) => {
         `INSERT INTO "document_permissions" (user_id, document_id, permission) VALUES ($1, $2, $3)`,
         [user.id, id, permission]
       );
+
+      const folderAccess = async (document_id, user_id) => {
+        const folder = await Document.findByPk(document_id);
+        if(!folder){
+          console.log("Document non trouvé. Son id est :", document_id)
+          return;
+        }
+        await DocumentPermission.create({
+          document_id: document_id,
+          user_id : user_id,
+          permission : "read"
+        })
+        if(folder.parent_id !== null){
+          folderAccess(folder.parent_id, user_id)
+        }
+      }
+      await folderAccess(doc.parent_id, user.id);
     }
 
     res.status(201).json({
