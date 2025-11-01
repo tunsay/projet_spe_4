@@ -227,11 +227,6 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ error: "Utilisateur non trouvé" });
     }
 
-    // Si type est 'text', le contenu est requis
-    if (type === "text" && !content) {
-      return res.status(400).json({ error: "Contenu requis pour un document textuel" });
-    }
-
     // Valider parent_id si fourni
     let validatedParentId = null;
     if (parent_id && parent_id.trim() !== "") {
@@ -262,7 +257,7 @@ router.post("/", async (req, res) => {
       (name, type, content, owner_id, parent_id, last_modified_by_id, last_modified_at) 
       VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING id, name, type, owner_id, parent_id, content, created_at`,
-      [name, type, content || null, owner_id, validatedParentId, owner_id]
+      [name, type, content || "", owner_id, validatedParentId, owner_id]
     );
 
     const document = result.rows[0];
@@ -902,7 +897,7 @@ router.put("/:id", async (req, res) => {
       return res.status(401).json({ error: "User ID requis (header: user-id)" });
     }
 
-    if (content === undefined) {
+    if (content === undefined || content === null) {
       return res.status(400).json({ error: "Contenu requis" });
     }
 
