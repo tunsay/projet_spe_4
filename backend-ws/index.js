@@ -4,7 +4,9 @@ import jwt from "jsonwebtoken";
 import {
     canAccessDocument,
     loadDocumentSnapshot,
+    saveDocumentContent
 } from "./services/documents.js";
+import eventBus from "./services/eventBus.js";
 import {
     openSession,
     closeSession
@@ -100,6 +102,7 @@ io.on("connection", (socket) => {
     // Demande de rejoindre un document
     socket.on("join-document", async ({ docId }, cb) => {
         try {
+            console.log("join-document received for docId:", docId, "by user:", socket.user?.id);
             if (!docId) {
                 console.log(
                     "user",
@@ -191,6 +194,7 @@ io.on("connection", (socket) => {
 
     socket.on("leave-document", async ({ docId }, cb) => {
         try {
+            console.log("leave-document received for docId:", docId, "by user:", socket.user?.id);
             if (!docId) {
                 console.log(
                     "user",
@@ -260,7 +264,7 @@ io.on("connection", (socket) => {
         try {
             const room = `document:${docId}`;
             // Validation & autorisation rapide
-            console.log("doc-change-client received for docId:", docId, "delta:", delta);
+            console.log("doc-change-client received for docId:", docId , "by user:", socket.user?.id);
             if (!socket.rooms.has(room)) {
                 console.log(
                     "user",
@@ -277,15 +281,11 @@ io.on("connection", (socket) => {
                 return respond({ ok: false, reason: "not_exist" }, cb);
             }
 
-            // Appliquer/persister le delta (optimiste ou via CRDT)
-            //await persistDelta(docId, delta, socket.user.id);
-            console.log("doc-change-client broadcasted to room:", room);
-
+            saveDocumentContent(socket.user, docId, delta.newText.text);
             // Broadcast à la room (sauf l'émetteur)
             socket
                 .to(room)
                 .emit("doc-change-server", { docId, delta, userId: socket.user?.id });
-            console.log("doc-change-client broadcasted to room:", room);
             console.log(
                 "user",
                 socket.id,
@@ -307,6 +307,7 @@ io.on("connection", (socket) => {
 
     socket.on("position-update", async ({ docId, userId, start, end, direction }, cb) => {
       try{
+        console.log("position-update received for docId:", docId, "by user:", socket.user?.id);
         if(!docId || !userId || !start || !end || ! direction){
           return respond({ ok: false, reason: "invalid_informations" }, cb)
         }
@@ -327,6 +328,7 @@ io.on("connection", (socket) => {
 
     socket.on("chat:new-message", async ({ docId, message }, cb) => {
         try {
+            console.log("chat:new-message received for docId:", docId, "by user:", socket.user?.id);
             if (!docId || !message) {
                 return respond({ ok: false, reason: "invalid_payload" }, cb);
             }
@@ -341,7 +343,6 @@ io.on("connection", (socket) => {
                 );
                 return respond({ ok: false, reason: "not_joined" }, cb);
             }
-            console.log("message before broadcast");
             const persistedMessage = await persistChatMessage(
                 socket.user,
                 docId,
@@ -398,7 +399,6 @@ io.on("connection", (socket) => {
             socket
                 .to(room)
                 .emit("chat:new-message", { docId, message: enrichedMessage });
-            console.log("message after broadcast");
             return respond({ ok: true, message: enrichedMessage }, cb);
         } catch (error) {
             console.error("Error in chat:new-message:", error);
@@ -412,6 +412,7 @@ io.on("connection", (socket) => {
 
     socket.on("chat:react", ({ docId, messageId, emoji }, cb) => {
         try {
+            console.log("chat:react received for docId:", docId, "messageId:", messageId, "by user:", socket.user?.id);
             if (
                 !docId ||
                 messageId === undefined ||
@@ -497,6 +498,8 @@ io.on("connection", (socket) => {
             const roomName = Array.from(room)[0];
             if (roomName?.startsWith("document:")) {
                 const docId = roomName?.split(":")[1];
+                console.log("User left document:", docId, "by user:", socket.user?.id);
+                socket.leave(room);
                 const clients = io.sockets.adapter.rooms.get(room);
                 const membersCount = clients ? clients.size : 0;
                 await closeSession(socket.user, docId);
@@ -509,6 +512,17 @@ io.on("connection", (socket) => {
             }
         }
     });
+});
+
+// Broadcast document persist events to the corresponding document room
+eventBus.on("document:saved", (doc) => {
+    try {
+        const room = `document:${doc.id}`;
+        console.log("Broadcasting document:saved to room:", room, "last_modified_by_id", doc.last_modified_by_id, "by", doc.last_modified_by);
+        io.to(room).emit("doc-saved", doc);
+    } catch (err) {
+        console.error("Failed to broadcast document:saved", err);
+    }
 });
 
 io.listen(process.env.WS_PORT || 3001);

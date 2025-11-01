@@ -941,21 +941,13 @@ router.put("/:id", async (req, res) => {
       `UPDATE "documents" 
        SET content = $1, last_modified_by_id = $2, last_modified_at = NOW()
        WHERE id = $3
-       RETURNING id, name, type, owner_id, parent_id, content, last_modified_at`,
+       RETURNING id, name, type, owner_id, parent_id, content, last_modified_at, last_modified_by_id`,
       [content, user_id, id]
     );
 
     const document = result.rows[0];
 
-    res.status(200).json({
-      id: document.id,
-      name: document.name,
-      type: document.type,
-      owner_id: document.owner_id,
-      parent_id: document.parent_id,
-      content: document.content,
-      updated_at: document.last_modified_at,
-    });
+    res.status(200).json(document);
   } catch (err) {
     console.error("Erreur modification document:", err);
     res.status(500).json({ error: "Erreur serveur interne" });
