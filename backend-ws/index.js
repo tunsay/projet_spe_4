@@ -519,7 +519,7 @@ eventBus.on("document:saved", (doc) => {
     try {
         const room = `document:${doc.id}`;
         console.log("Broadcasting document:saved to room:", room, "last_modified_by_id", doc.last_modified_by_id, "by", doc.last_modified_by);
-        io.to(room).emit("doc-saved", doc);
+        io.to(room).emit("document:saved", doc);
     } catch (err) {
         console.error("Failed to broadcast document:saved", err);
     }

@@ -11,6 +11,9 @@ const inactivityTimers = new Map(); // documentId -> Timeout
 const pendingDocuments = new Map(); // documentId -> content
 // How long (ms) with no calls to saveDocumentContent before persisting to DB
 const INACTIVITY_MS = 5_000; // user requested 5 seconds
+// Maximum time (ms) to wait from the first update in a batch before forcing a save
+const maxWaitTimers = new Map(); // documentId -> Timeout
+const MAX_WAIT_MS = 5_000; // force-save at most 5s after first call
 
 // The save function passed to startAutoSave. It will be called periodically with (documentId, content)
 async function _autoSaveSaveFn(documentId, content) {
@@ -22,7 +25,7 @@ async function _autoSaveSaveFn(documentId, content) {
         return;
     }
     try {
-        console.log("documentRouter.updateDocumentContent for documentId:", documentId, "by user:", user.id);
+        console.log("Auto-saving document:", documentId, "last updated by user:", user.id, "content length:", content.length);
         const result = await documentRouter.updateDocumentContent(user, documentId, content);
         // Notify listeners that an autosave persisted
         try {
@@ -66,6 +69,36 @@ export function saveDocumentContent(user, documentId, content) {
             clearTimeout(inactivityTimers.get(documentId));
         }
 
+        // if there's no max-wait timer for this document, create one. This
+        // ensures we will persist at most MAX_WAIT_MS after the first call in
+        // a burst even if saveDocumentContent keeps getting called.
+        if (!maxWaitTimers.has(documentId)) {
+            const maxTimer = setTimeout(async () => {
+                try {
+                    // attempt to flush pending content when max wait elapses
+                    const pending = pendingDocuments.get(documentId);
+                    if (pending !== undefined) {
+                        await _autoSaveSaveFn(documentId, pending);
+                        pendingDocuments.delete(documentId);
+                        documentUsers.delete(documentId);
+                    }
+                } catch (err) {
+                    // eslint-disable-next-line no-console
+                    console.error('Error persisting autosave (max-wait) for', documentId, err);
+                    // keep pending so a future call can retry; fall through to cleanup timers
+                } finally {
+                    // cleanup timers regardless so subsequent updates start a fresh batch
+                    if (inactivityTimers.has(documentId)) {
+                        clearTimeout(inactivityTimers.get(documentId));
+                        inactivityTimers.delete(documentId);
+                    }
+                    maxWaitTimers.delete(documentId);
+                }
+            }, MAX_WAIT_MS);
+
+            maxWaitTimers.set(documentId, maxTimer);
+        }
+
         const timer = setTimeout(async () => {
             try {
                 // get the latest pending content (may have changed since timer was set)
@@ -88,6 +121,12 @@ export function saveDocumentContent(user, documentId, content) {
                 console.error('Error persisting autosave for', documentId, err);
                 // keep pending content so a subsequent call will retry; also remove timer
                 inactivityTimers.delete(documentId);
+            } finally {
+                // if a max-wait timer exists, cancel it because we already flushed
+                if (maxWaitTimers.has(documentId)) {
+                    clearTimeout(maxWaitTimers.get(documentId));
+                    maxWaitTimers.delete(documentId);
+                }
             }
         }, INACTIVITY_MS);
 
