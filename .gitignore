@@ -69,7 +69,7 @@ web_modules/
 .env
 .env.*
 !.env.example
-!.env.production
+.env.production
 
 frontend/package-lock.json
 backend-api/package-lock.json
