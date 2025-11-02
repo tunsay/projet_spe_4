@@ -74,8 +74,6 @@ CREATE TABLE "messages" (
 );
 
 -- Constraints (These were already correct)
-CREATE UNIQUE INDEX ON "documents" ("parent_id", "name");
-
 ALTER TABLE "documents" ADD FOREIGN KEY ("parent_id") REFERENCES "documents" ("id") ON DELETE CASCADE;
 ALTER TABLE "documents" ADD FOREIGN KEY ("owner_id") REFERENCES "users" ("id");
 ALTER TABLE "documents" ADD FOREIGN KEY ("last_modified_by_id") REFERENCES "users" ("id");
