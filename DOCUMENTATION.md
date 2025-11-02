@@ -151,29 +151,29 @@ projet_spe_4/
          │
          ▼
 ┌─────────────────────────────────────┐
-│   Frontend (Next.js - Port 3000)   │
-│   - React Components (TypeScript)  │
-│   - Socket.IO Client               │
-│   - Middleware Auth (Next.js)      │
-│   - Locale: FR                     │
+│   Frontend (Next.js - Port 3000)    │
+│   - React Components (TypeScript)   │
+│   - Socket.IO Client                │
+│   - Middleware Auth (Next.js)       │
+│   - Locale: FR                      │
 └────────┬────────────────────────────┘
          │
-         ├──────────────┬
-         │              │              
-         ▼              ▼              
-┌─────────────┐ ┌──────────────┐ ┌────────────┐
-│  Backend    │ │   Backend    │ │ PostgreSQL │
-│  API        │ │  WebSocket   │ │   (5432)   │
-│ (Port 3000) │ │ (Port 3001)  │ └────────────┘
-│             │ │              │       ▲
-│ - Express  │ │ - Socket.IO  │       │
-│ - Sequelize│ │ - Temps réel │       │
-│ - JWT      │ │ - Chat       │       │
-│ - Swagger  │ │ - Collab     │       │
-│ - Multer   │ │ - Présence   │       │
-└─────────────┘ └──────  ─────┘       │
-       │                              │
-       └─────────────────────────────┘
+         ├──────────────────────┬
+         │                      │              
+         ▼                      ▼              
+┌─────────────┐          ┌──────────────┐ ┌────────────┐
+│  Backend    │          │   Backend    │ │ PostgreSQL │
+│  API        │          │  WebSocket   │ │   (5432)   │
+│ (Port 3000) │          │ (Port 3001)  │ └────────────┘
+│             │          │              │       ▲
+│ - Express   │ <─────── │ - Socket.IO  │       │
+│ - Sequelize │          │ - Temps réel │       │
+│ - JWT       │          │ - Chat       │       │
+│ - Swagger   │          │ - Collab     │       │
+│ - Multer    │          │ - Présence   │       │
+└─────────────┘          └──────────────┘       │
+       │                                        │
+       └────────────────────────────────────────┘
 ```
 
 ---
