@@ -8,6 +8,7 @@ interface DocumentTextSectionProps {
     setCurrentSelection: (selection: { start: number; end: number }) => void;
     onContentChange: (newContent: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => void;
     ownerDisplayName: string;
+    lastSavedAt: Date | null;
 }
 
 export function DocumentTextSection({
@@ -17,6 +18,7 @@ export function DocumentTextSection({
     setCurrentSelection,
     onContentChange,
     ownerDisplayName,
+    lastSavedAt,
 }: DocumentTextSectionProps) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -61,7 +63,7 @@ export function DocumentTextSection({
                     {document.last_modified_at && (
                         <div>
                             <span className="font-medium">Modifié le :</span>{" "}
-                            {new Date(document.last_modified_at).toLocaleString()}
+                            {new Date(lastSavedAt || document.last_modified_at).toLocaleString()}
                         </div>
                     )}
                     <div>

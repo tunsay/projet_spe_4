@@ -764,13 +764,13 @@ export default function DocumentDetailPage() {
                             content={content}
                             onContentChange={setContent}
                             ownerDisplayName={ownerDisplayName}
+                            lastSavedAt={lastSavedAt}
                         />
                     ) : (
                         <DocumentSummarySection
                             document={doc}
                             inlinePreviewUrl={inlinePreviewUrl}
                             ownerDisplayName={ownerDisplayName}
-                            lastSavedAt={lastSavedAt}
                         />
                     )}
                 </div>

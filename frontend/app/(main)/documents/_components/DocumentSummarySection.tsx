@@ -4,14 +4,12 @@ interface DocumentSummarySectionProps {
     document: DocumentDetail;
     inlinePreviewUrl: string | null;
     ownerDisplayName: string;
-    lastSavedAt: Date | null;
 }
 
 export function DocumentSummarySection({
     document,
     inlinePreviewUrl,
     ownerDisplayName,
-    lastSavedAt,
 }: DocumentSummarySectionProps) {
     return (
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-lg dark:border-gray-700 dark:bg-gray-800">
@@ -29,7 +27,7 @@ export function DocumentSummarySection({
                 </div>
                 <div>
                     <span className="font-medium">Créé le :</span>{" "}
-                    {new Date(lastSavedAt || document.created_at).toLocaleString()}
+                    {new Date(document.created_at).toLocaleString()}
                 </div>
                 {document.last_modified_at && (
                     <div>
