@@ -244,7 +244,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         if (!ctx) return;
 
         if (ctx.state === "suspended") {
-            ctx.resume().catch(() => { });
+            return ;
         }
 
         try {
@@ -607,9 +607,9 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         const ctx = audioContextRef.current;
         if (!ctx) return;
         if (state === "on") {
-            ctx.suspend()
-        } else {
             ctx.resume()
+        } else {
+            ctx.suspend()
         }
     }, []);
 
@@ -640,7 +640,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         if (!ctx) return;
 
         if (ctx.state === "suspended") {
-            ctx.resume().catch(() => { });
+            return ;
         }
         try {
             // If a UI listener (CallCollaboration) is present, dispatch a DOM event

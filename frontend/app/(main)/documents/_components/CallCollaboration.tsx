@@ -57,6 +57,8 @@ export function CallCollaboration({ documentId, sendAudio, handleHeadphoneAudio 
       requestDataIntervalRef.current = window.setInterval(() => mediaRecorderRef?.current?.stop(), 500);
 
       setCallStatus("in-call");
+      handleHeadphoneAudio && handleHeadphoneAudio("on");
+      setHeadphonesMuted(false);
     } catch (err) {
       console.error("Failed to get media devices:", err);
       setCallStatus("idle");
@@ -108,7 +110,7 @@ export function CallCollaboration({ documentId, sendAudio, handleHeadphoneAudio 
 
   const toggleHeadphones = () => {
     if (mediaStreamRef.current) {
-      handleHeadphoneAudio && handleHeadphoneAudio(headphonesMuted ? "off" : "on");
+      handleHeadphoneAudio && handleHeadphoneAudio(!headphonesMuted ? "off" : "on");
       setHeadphonesMuted((v) => !v);
     }
   };
@@ -202,14 +204,12 @@ export function CallCollaboration({ documentId, sendAudio, handleHeadphoneAudio 
             >
               {micMuted ? "Mic Off" : "Mic On"}
             </button>
-            {/* 
             <button
               onClick={toggleHeadphones}
               className={`rounded-md px-3 py-1 text-sm text-white ${headphonesMuted ? "bg-yellow-600" : "bg-slate-600"}`}
             >
               {headphonesMuted ? "Headphones Off" : "Headphones On"}
             </button>
-            */}
           </>}
       </div>
     </div>
