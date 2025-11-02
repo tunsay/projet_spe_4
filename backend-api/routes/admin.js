@@ -130,9 +130,18 @@ router.post("/users", async (req, res) => {
         res.status(201).json(user);
     } catch (err) {
         console.error(err);
+        
+        // Détecter l'erreur de duplication PostgreSQL
+        if (err.code === '23505') {
+            return res.status(409).json({ 
+                error: "Cet email est déjà utilisé" 
+            });
+        }
+        
         res.status(400).json({ error: err.message });
     }
 });
+
 
 /**
  * @openapi

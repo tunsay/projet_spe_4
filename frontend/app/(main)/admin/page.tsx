@@ -196,10 +196,10 @@ export default function AdminUsersPage() {
 
             if (!response.ok) {
                 const body = await response.json().catch(() => ({
-                    message: `Erreur HTTP ${response.status}`,
+                    error: `Erreur HTTP ${response.status}`,
                 }));
                 throw new Error(
-                    body.message || `Échec de l'inscription: ${response.status}`
+                    body.error || `Échec de l'inscription: ${response.status}`
                 );
             }
 
@@ -225,8 +225,8 @@ export default function AdminUsersPage() {
     };
 
     return (
-        <main className="mx-auto max-w-6xl px-4 py-10 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <h1 className="text-3xl font-extrabold mb-8 text-gray-900 dark:text-gray-100">
+        <main className="bg-gray-50 dark:bg-gray-900 mx-auto px-4 py-10 max-w-6xl min-h-screen">
+            <h1 className="mb-8 font-extrabold text-gray-900 dark:text-gray-100 text-3xl">
                 Administration des Utilisateurs
             </h1>
 
@@ -247,9 +247,9 @@ export default function AdminUsersPage() {
             {/* Formulaire de Création */}
             <form
                 onSubmit={handleFormSubmit}
-                className="p-6 mb-12 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700"
+                className="bg-white dark:bg-gray-800 shadow-xl mb-12 p-6 border border-gray-200 dark:border-gray-700 rounded-xl"
             >
-                <h2 className="text-xl font-semibold mb-6 text-gray-900 dark:text-gray-100">
+                <h2 className="mb-6 font-semibold text-gray-900 dark:text-gray-100 text-xl">
                     Inscrire un nouvel utilisateur
                 </h2>
 
@@ -261,7 +261,7 @@ export default function AdminUsersPage() {
                         placeholder="Email"
                         value={newUserData.email}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white p-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        className="dark:bg-gray-900 shadow-sm p-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full dark:text-white text-sm transition duration-150"
                     />
 
                     <input
@@ -271,7 +271,7 @@ export default function AdminUsersPage() {
                         placeholder="Nom d'affichage"
                         value={newUserData.display_name}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white p-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        className="dark:bg-gray-900 shadow-sm p-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full dark:text-white text-sm transition duration-150"
                     />
 
                     <input
@@ -281,25 +281,25 @@ export default function AdminUsersPage() {
                         placeholder="Mot de passe"
                         value={newUserData.password}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white p-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        className="dark:bg-gray-900 shadow-sm p-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full dark:text-white text-sm transition duration-150"
                     />
 
                     <select
                         name="role"
                         value={newUserData.role}
                         onChange={handleFormChange}
-                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white p-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                        className="dark:bg-gray-900 shadow-sm p-2 border border-gray-300 focus:border-indigo-500 dark:border-gray-600 rounded-lg focus:ring-indigo-500 w-full dark:text-white text-sm transition duration-150"
                     >
                         <option value="user">Utilisateur standard</option>
                         <option value="admin">Administrateur</option>
                     </select>
                 </div>
 
-                <div className="mt-8 flex justify-end items-center">
+                <div className="flex justify-end items-center mt-8">
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="px-6 py-2.5 border border-transparent text-sm font-medium rounded-lg shadow-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition duration-150"
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-md px-6 py-2.5 border border-transparent rounded-lg font-medium text-white text-sm transition duration-150"
                     >
                         {isSubmitting
                             ? "Inscription en cours..."
@@ -308,24 +308,24 @@ export default function AdminUsersPage() {
                 </div>
             </form>
 
-            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+            <h2 className="mb-6 font-bold text-gray-900 dark:text-gray-100 text-2xl">
                 Liste des Utilisateurs
             </h2>
 
             {loading ? (
-                <div className="flex items-center justify-center h-20 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                    <div className="px-4 py-2 text-sm font-medium leading-none text-center text-indigo-800 bg-indigo-200 rounded-full animate-pulse dark:bg-indigo-900 dark:text-indigo-200">
+                <div className="flex justify-center items-center bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 rounded-xl h-20">
+                    <div className="bg-indigo-200 dark:bg-indigo-900 px-4 py-2 rounded-full font-medium text-indigo-800 dark:text-indigo-200 text-sm text-center leading-none animate-pulse">
                         Chargement des utilisateurs...
                     </div>
                 </div>
             ) : users.length === 0 ? (
-                <div className="p-4 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+                <div className="bg-white dark:bg-gray-800 shadow-sm p-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300">
                     Aucun utilisateur trouvé.
                 </div>
             ) : (
-                <div className="relative overflow-x-auto shadow-xl rounded-xl border border-gray-200 dark:border-gray-700">
-                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
+                <div className="relative shadow-xl border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto">
+                    <table className="w-full text-gray-500 dark:text-gray-400 text-sm text-left">
+                        <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 text-xs uppercase">
                             <tr>
                                 <th scope="col" className="px-6 py-3">
                                     Nom d&apos;utilisateur
@@ -348,7 +348,7 @@ export default function AdminUsersPage() {
                             {users.map((user) => (
                                 <tr
                                     key={user.id}
-                                    className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-100"
+                                    className="bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700/50 border-gray-100 dark:border-gray-700 border-b transition duration-100"
                                 >
                                     <th
                                         scope="row"
