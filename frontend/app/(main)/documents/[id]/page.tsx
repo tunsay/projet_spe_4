@@ -69,6 +69,8 @@ export default function DocumentDetailPage() {
         messagesList,
         setMessagesList,
         sendMessage,
+        sendAudio,
+        handleHeadphoneAudio,
         toggleReaction,
         currentSelection,
         setCurrentSelection,
@@ -773,6 +775,9 @@ export default function DocumentDetailPage() {
                     )}
                 </div>
                 <CollaborationSidebar
+                    document={doc}
+                    sendAudio={sendAudio}
+                    handleHeadphoneAudio={handleHeadphoneAudio}
                     participants={participants}
                     participantsLoading={participantsLoading}
                     participantsError={participantsError}
@@ -828,6 +833,7 @@ export default function DocumentDetailPage() {
                 </div>
             </div>
 
+            
             <InviteCollaboratorModal
                 isOpen={isInviteModalOpen}
                 inviteEmail={inviteEmail}

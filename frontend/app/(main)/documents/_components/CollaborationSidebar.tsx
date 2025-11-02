@@ -3,13 +3,16 @@ import {
     ChatBubbleLeftRightIcon,
     UserGroupIcon,
     UserPlusIcon,
+    MicrophoneIcon
 } from "@heroicons/react/20/solid";
 import {
     ChatMessageEntry,
+    DocumentDetail,
     Profile,
     SessionParticipantEntry,
     formatTimestamp,
 } from "@/types/documents";
+import { CallCollaboration } from "./CallCollaboration";
 
 interface CollaborationSidebarProps {
     participants: SessionParticipantEntry[];
@@ -33,6 +36,9 @@ interface CollaborationSidebarProps {
     ) => Promise<unknown> | void;
     emojiOptions: string[];
     currentUserId: string | null;
+    document: DocumentDetail | null;
+    sendAudio: (documentId: string, data: Blob) => void;
+    handleHeadphoneAudio?: (state: "on" | "off") => void;
 }
 
 export function CollaborationSidebar({
@@ -54,6 +60,9 @@ export function CollaborationSidebar({
     onToggleReaction,
     emojiOptions,
     currentUserId,
+    document: doc,
+    sendAudio,
+    handleHeadphoneAudio
 }: CollaborationSidebarProps) {
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const [composerEmojiOpen, setComposerEmojiOpen] = useState(false);
@@ -185,6 +194,10 @@ export function CollaborationSidebar({
                         </p>
                     )}
                 </div>
+            </div>
+
+            <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <CallCollaboration documentId={doc?.id} sendAudio={sendAudio} handleHeadphoneAudio={handleHeadphoneAudio} />
             </div>
 
             <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">

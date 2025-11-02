@@ -440,6 +440,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         socket.on("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
         socket.on("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
         socket.on("document:saved", handleDocumentSaved);
+        socket.on("chat:new-audio", handleIncomingAudio);
         socket.on("position-update", handlePositionUpdate);
         socket.on("chat:new-message", handleIncomingMessage);
         socket.on("chat:reaction", handleIncomingReaction);
@@ -456,6 +457,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
                 socket.off("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
                 socket.off("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
                 socket.off("document:saved", handleDocumentSaved);
+                socket.off("chat:new-audio", handleIncomingAudio);
                 socket.off("position-update", handlePositionUpdate);
                 socket.off("chat:new-message", handleIncomingMessage);
                 socket.off("chat:reaction", handleIncomingReaction);
@@ -563,6 +565,121 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         },
         [socket, documentId]
     )
+
+    async function playBlobAudio(ctx: AudioContext, arrayBuffer: ArrayBuffer) {
+        // Prefer WebAudio playback (can mix, lower latency) if AudioContext unlocked.
+        try {
+            ctx.decodeAudioData(arrayBuffer, (buffer) => {
+                const bufferSource = ctx.createBufferSource();
+                bufferSource.buffer = buffer; 
+                bufferSource.connect(ctx.destination); 
+                bufferSource.start();
+                bufferSource.stop(500)
+            }, (error) => {
+                console.log(error);
+            });
+        } catch (err) {
+            console.log("playBlobAudio failed:", err);
+            // as a fallback, queue the blob so it will be attempted after a user gesture
+        }
+    }
+
+    const handleHeadphoneAudio = useCallback((state: "on" | "off") => {
+        if (typeof window === "undefined") return;
+        const AudioContextCtor =
+            window.AudioContext ||
+            (window as unknown as {
+                webkitAudioContext?: typeof AudioContext;
+            }).webkitAudioContext;
+        if (!AudioContextCtor) return;
+
+        if (
+            !audioContextRef.current ||
+            audioContextRef.current.state === "closed"
+        ) {
+            try {
+                audioContextRef.current = new AudioContextCtor();
+            } catch (error) {
+                audioContextRef.current = null;
+            }
+        }
+
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+        if (state === "on") {
+            ctx.suspend()
+        } else {
+            ctx.resume()
+        }
+    }, []);
+
+    const handleIncomingAudio = async ({ docId, data }: { docId: string, data: ArrayBuffer }) => {
+        if (docId !== documentId) {
+            return;
+        }
+        if (typeof window === "undefined") return;
+        const AudioContextCtor =
+            window.AudioContext ||
+            (window as unknown as {
+                webkitAudioContext?: typeof AudioContext;
+            }).webkitAudioContext;
+        if (!AudioContextCtor) return;
+
+        if (
+            !audioContextRef.current ||
+            audioContextRef.current.state === "closed"
+        ) {
+            try {
+                audioContextRef.current = new AudioContextCtor();
+            } catch (error) {
+                audioContextRef.current = null;
+            }
+        }
+
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+
+        if (ctx.state === "suspended") {
+            ctx.resume().catch(() => { });
+        }
+        try {
+            // If a UI listener (CallCollaboration) is present, dispatch a DOM event
+            // so the component can play the incoming audio (and connect to a local
+            // audio element or stream). Otherwise fall back to internal playback.
+            // fallback: play locally using existing logic
+            await playBlobAudio(ctx, data);
+        } catch (error) {
+            console.log("Erreur de lecture audio entrante :", error);
+            // ignore audio errors (autoplay restrictions, etc.)
+        }
+    };
+
+    const sendAudio = useCallback(
+        async (
+            docId: string,
+            data: Blob
+        ): Promise<boolean> => {
+            if (!socket) return await Promise.reject(new Error("no-socket"));
+            if (!docId) return await Promise.reject(new Error("no-doc"));
+            const arrayBuffer = await data.arrayBuffer();
+            return new Promise<boolean>((resolve, reject) => {
+                try {
+                    socket.emit(
+                        "chat:new-audio",
+                        { docId: docId, data: arrayBuffer },
+                        (ack: any) => {
+                            if (ack && ack.ok === true) {
+                                return resolve(true);
+                            }
+                            return reject(false)
+                        }
+                    );
+                } catch (e) {
+                    return reject(e as Error);
+                }
+            })
+        }, [socket]
+    );
 
     const handleIncomingMessage = (payload: unknown) => {
         if (!payload || typeof payload !== "object" || !("docId" in payload)) {
@@ -780,6 +897,8 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         sendNewPosition,
         handleIncomingMessage,
         sendMessage,
+        handleIncomingAudio,
+        sendAudio,
         toggleReaction,
         messagesList,
         participants,
@@ -793,5 +912,6 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         setLastSavedAt,
         author,
         setAuthor,
+        handleHeadphoneAudio
     };
 }
