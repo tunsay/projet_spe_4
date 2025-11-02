@@ -28,6 +28,12 @@ API_PORT=3000
 # WebSocket
 WS_PORT=3001
 
+# Cookies args
+COOKIE_DOMAIN=localhost
+COOKIE_SECURE=true
+COOKIE_SAMESITE=Strict
+JWT_TTL=1h
+
 # Frontend (pour Docker uniquement)
 NEXT_PUBLIC_API_URL=http://localhost:3000
 NEXT_PUBLIC_WS_URL=http://localhost:3001
