@@ -8,7 +8,6 @@ import {
     useCallback,
     useEffect,
     useMemo,
-    useRef,
     useState,
 } from "react";
 import { buildApiUrl } from "@/lib/api";
@@ -25,7 +24,6 @@ import {
     DocumentDetail,
     FeedbackMessage,
     Profile,
-    SessionParticipantEntry,
 } from "@/types/documents";
 import {
     normalizeMessageRecord,
