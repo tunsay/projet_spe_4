@@ -70,7 +70,7 @@ router.get("/", async (req, res) => {
 
     // Fonction récursive pour construire la hiérarchie
     const buildHierarchy = async (parentId) => {
-      
+      console.log("Building hierarchy for parentId:", parentId, "userId:", userId);
       const documents = await Document.findAll({
         where: {
           parent_id : parentId
@@ -1157,6 +1157,12 @@ router.post("/file", upload.single("file"), async (req, res) => {
     );
 
     const document = result.rows[0];
+
+    await DocumentPermission.create({
+      document_id: document.id,
+      user_id: req.userId,
+      permission: "owner"
+    })
 
     res.status(201).json({
       id: document.id,
