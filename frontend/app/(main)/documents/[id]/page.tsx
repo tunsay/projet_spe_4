@@ -25,7 +25,6 @@ import {
     DocumentDetail,
     FeedbackMessage,
     Profile,
-    SaveState,
     SessionParticipantEntry,
 } from "@/types/documents";
 import {
@@ -74,16 +73,17 @@ export default function DocumentDetailPage() {
         sendMessage,
         toggleReaction,
         currentSelection,
-        setCurrentSelection
+        setCurrentSelection,
+        saveState,
+        saveIndicator,
+        lastSavedAt,
+        author: ownerDisplayName,
+        setAuthor,
     } = useRoomDocument(socket, documentId);
 
     const [profile, setProfile] = useState<Profile | null>(null);
-    const [persistedContent, setPersistedContent] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState<FeedbackMessage | null>(null);
-    const [saveState, setSaveState] = useState<SaveState>("idle");
-    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-    const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const [participantsLoading, setParticipantsLoading] = useState(false);
     const [participantsError, setParticipantsError] = useState<string | null>(
@@ -104,29 +104,6 @@ export default function DocumentDetailPage() {
 
     const isTextDocument = doc?.type === "text";
     const isOwner = doc && profile ? doc.owner_id === profile.id : false;
-
-    const ownerDisplayName = useMemo(() => {
-        if (!doc) return "";
-        if (profile && doc.owner_id === profile.id) {
-            return (
-                (profile.name && profile.name.trim()) ||
-                (profile.email && profile.email.trim()) ||
-                profile.id ||
-                ""
-            );
-        }
-        const owner =
-            participants.find((item) => item.userId === doc.owner_id) ??
-            participants.find((item) => item.email === doc.owner_id);
-        if (owner) {
-            return (
-                (owner.displayName && owner.displayName.trim()) ||
-                (owner.email && owner.email.trim()) ||
-                owner.userId
-            );
-        }
-        return "";
-    }, [doc, participants, profile]);
 
     const downloadUrl = useMemo(() => {
         if (!doc) return null;
@@ -216,9 +193,78 @@ export default function DocumentDetailPage() {
         }
     }, [router]);
 
-    const fetchDocument = useCallback(async () => {
+    const fetchAuthorProfile = useCallback(
+        async (authorId?: string | null) => {
+            if (!authorId) return null;
+
+            // If the author is the current user, derive from local profile
+            if (profile?.id && profile.id === authorId) {
+                const display =
+                    (profile.name && profile.name.trim()) ||
+                    (profile.email && profile.email.trim()) ||
+                    profile.id;
+                setAuthor(display);
+                return display;
+            }
+
+            try {
+                const response = await fetch(
+                    buildApiUrl(`/api/profile/${encodeURIComponent(authorId)}`),
+                    {
+                        credentials: "include",
+                    }
+                );
+
+                if (await handleUnauthorized(response, router)) {
+                    return null;
+                }
+
+                if (response.status === 404) {
+                    // No remote profile found — fallback to ID
+                    const fallback = authorId;
+                    setAuthor(fallback);
+                    return fallback;
+                }
+
+                let payload: unknown = null;
+                try {
+                    payload = await response.json();
+                } catch {
+                    payload = null;
+                }
+
+                if (!response.ok) {
+                    // Non-critical: log and fallback to ID
+                    console.warn(
+                        "fetchAuthorProfile: non-ok response",
+                        response.status,
+                        payload
+                    );
+                    const fallback = authorId;
+                    setAuthor(fallback);
+                    return fallback;
+                }
+
+                const data = payload as Partial<Profile>;
+                const display =
+                    (data.name && data.name.trim()) ||
+                    (data.email && data.email.trim()) ||
+                    authorId;
+                setAuthor(display);
+                return display;
+            } catch (error) {
+                console.error("Erreur author profile:", error);
+                // On error, fallback to owner id
+                setAuthor(authorId);
+                return authorId;
+            }
+        },
+        [profile?.id, profile?.name, profile?.email, router, setAuthor]
+    );
+
+    const fetchDocument = useCallback(async (): Promise<DocumentDetail | null> => {
         if (!documentId) {
-            return;
+            return null;
         }
 
         setLoading(true);
@@ -232,7 +278,7 @@ export default function DocumentDetailPage() {
             );
 
             if (await handleUnauthorized(response, router)) {
-                return;
+                return null;
             }
 
             if (response.status === 404) {
@@ -241,7 +287,7 @@ export default function DocumentDetailPage() {
                     type: "error",
                     text: "Document introuvable ou accès refusé.",
                 });
-                return;
+                return null;
             }
 
             let payload: unknown = null;
@@ -263,12 +309,7 @@ export default function DocumentDetailPage() {
             const data = payload as DocumentDetail;
             setDoc(data);
 
-            const initial = data.content ?? "";
-            setContent(initial, initial.length, initial.length, "forward");
-            setPersistedContent(initial);
-            setLastSavedAt(
-                data.last_modified_at ? new Date(data.last_modified_at) : null
-            );
+            return data;
         } catch (error) {
             console.error("Erreur document:", error);
             setMessage({
@@ -278,74 +319,11 @@ export default function DocumentDetailPage() {
                         ? error.message
                         : "Erreur inattendue lors du chargement du document.",
             });
+            return null;
         } finally {
             setLoading(false);
         }
     }, [documentId, router, setDoc]);
-
-    const handleSave = useCallback(
-        async (nextContent?: string) => {
-            if (!doc || doc.type !== "text") return;
-
-            const payload =
-                typeof nextContent === "string" ? nextContent : content;
-            if (payload === persistedContent) return;
-
-            setSaveState("saving");
-            try {
-                const response = await fetch(
-                    buildApiUrl(`/api/documents/${doc.id}`),
-                    {
-                        method: "PUT",
-                        credentials: "include",
-                        headers: withUserHeaders({
-                            "Content-Type": "application/json",
-                        }),
-                        body: JSON.stringify({ content: payload }),
-                    }
-                );
-
-                if (await handleUnauthorized(response, router)) {
-                    return;
-                }
-
-                let body: unknown = null;
-                try {
-                    body = await response.json();
-                } catch {
-                    body = null;
-                }
-
-                if (!response.ok) {
-                    throw new Error(
-                        normalizeErrorMessage(
-                            body,
-                            "Impossible d'enregistrer le document."
-                        )
-                    );
-                }
-
-                setPersistedContent(payload);
-                setSaveState("saved");
-                setLastSavedAt(new Date());
-            } catch (error) {
-                console.error(
-                    "Erreur lors de la sauvegarde du document",
-                    doc.id,
-                    error
-                );
-                setSaveState("error");
-                setMessage({
-                    type: "error",
-                    text:
-                        error instanceof Error
-                            ? error.message
-                            : "Erreur lors de la sauvegarde du document.",
-                });
-            }
-        },
-        [doc, content, persistedContent, withUserHeaders, router]
-    );
 
     const fetchParticipants = useCallback(async () => {
         if (!documentId) return;
@@ -440,7 +418,8 @@ export default function DocumentDetailPage() {
         const bootstrap = async () => {
             const prof = await fetchProfile();
             if (!cancelled && prof) {
-                await fetchDocument();
+                const document = await fetchDocument();
+                await fetchAuthorProfile(document?.owner_id ?? null);
             }
         };
 
@@ -449,34 +428,13 @@ export default function DocumentDetailPage() {
         return () => {
             cancelled = true;
         };
-    }, [documentId, fetchProfile, fetchDocument]);
+    }, [documentId, fetchProfile, fetchDocument, fetchAuthorProfile]);
 
     useEffect(() => {
         if (!doc || !documentId) return;
         fetchParticipants();
         fetchMessages();
     }, [doc, documentId, fetchParticipants, fetchMessages]);
-
-    useEffect(() => {
-        if (!isTextDocument) return;
-        if (content === persistedContent) return;
-
-        setSaveState("idle");
-
-        if (saveTimeout.current) {
-            clearTimeout(saveTimeout.current);
-        }
-
-        saveTimeout.current = setTimeout(() => {
-            handleSave(content);
-        }, 1500);
-
-        return () => {
-            if (saveTimeout.current) {
-                clearTimeout(saveTimeout.current);
-            }
-        };
-    }, [content, persistedContent, isTextDocument, handleSave]);
 
     const handleSendMessage = useCallback(
         async (event: FormEvent<HTMLFormElement>) => {
@@ -642,21 +600,6 @@ export default function DocumentDetailPage() {
         ]
     );
 
-    const saveIndicator = useMemo(() => {
-        switch (saveState) {
-            case "saving":
-                return "Enregistrement…";
-            case "saved":
-                return "Enregistré";
-            case "error":
-                return "Erreur de sauvegarde";
-            default:
-                return content === persistedContent
-                    ? "À jour"
-                    : "Modifications en attente";
-        }
-    }, [saveState, content, persistedContent]);
-
     const sortedMessages = useMemo(() => {
         return [...messagesList].sort((a, b) => {
             const aTime = new Date(a.created_at).getTime();
@@ -703,7 +646,6 @@ export default function DocumentDetailPage() {
     }, [
         participants,
         doc?.owner_id,
-        ownerDisplayName,
         profile?.id,
         profile?.name,
         profile?.email,
@@ -828,6 +770,7 @@ export default function DocumentDetailPage() {
                             document={doc}
                             inlinePreviewUrl={inlinePreviewUrl}
                             ownerDisplayName={ownerDisplayName}
+                            lastSavedAt={lastSavedAt}
                         />
                     )}
                 </div>
@@ -865,9 +808,6 @@ export default function DocumentDetailPage() {
                         saveState={saveState}
                         lastSavedAt={lastSavedAt}
                         isTextDocument={isTextDocument}
-                        content={content}
-                        persistedContent={persistedContent}
-                        onSave={() => handleSave()}
                         downloadUrl={downloadUrl}
                         inlinePreviewUrl={inlinePreviewUrl}
                         onDownload={handleDownload}

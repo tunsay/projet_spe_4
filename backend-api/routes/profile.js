@@ -33,6 +33,46 @@ router.get("/", userController.getUserProfile);
 
 /**
  * @openapi
+ * /profile/{id}:
+ *   get:
+ *     summary: Récupère le profil d'un utilisateur par ID
+ *     tags:
+ *       - Profile
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de l'utilisateur
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                   format: email
+ *       '400':
+ *         description: Requête invalide
+ *       '401':
+ *         description: Non autorisé
+ *       '404':
+ *         description: Utilisateur non trouvé
+ */
+router.get("/:id", auth, userController.getUserById);
+
+/**
+ * @openapi
  * /profile:
  *   put:
  *     summary: Met à jour le profil (nom, email, mot de passe)

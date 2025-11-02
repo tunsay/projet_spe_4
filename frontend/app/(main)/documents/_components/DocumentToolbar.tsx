@@ -7,9 +7,6 @@ interface DocumentToolbarProps {
     saveState: SaveState;
     lastSavedAt: Date | null;
     isTextDocument: boolean;
-    content: string;
-    persistedContent: string;
-    onSave: () => void;
     downloadUrl: string | null;
     inlinePreviewUrl: string | null;
     onDownload: () => void;
@@ -22,9 +19,6 @@ export function DocumentToolbar({
     saveState,
     lastSavedAt,
     isTextDocument,
-    content,
-    persistedContent,
-    onSave,
     downloadUrl,
     inlinePreviewUrl,
     onDownload,
@@ -65,16 +59,6 @@ export function DocumentToolbar({
                 )}
                 {isTextDocument ? (
                     <div className="mt-3 flex flex-col gap-2">
-                        <button
-                            onClick={onSave}
-                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-md transition duration-150 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={
-                                saveState === "saving" ||
-                                content === persistedContent
-                            }
-                        >
-                            Sauvegarder maintenant
-                        </button>
                         {downloadUrl && (
                             <button
                                 type="button"

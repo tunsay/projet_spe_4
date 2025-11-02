@@ -6,6 +6,7 @@ import {
     loadDocumentSnapshot,
     saveDocumentContent
 } from "./services/documents.js";
+//import { getAuthor } from "./services/profile.js";
 import eventBus from "./services/eventBus.js";
 import {
     openSession,
@@ -263,8 +264,12 @@ io.on("connection", (socket) => {
     socket.on("doc-change-client", async ({ docId, delta }, cb) => {
         try {
             const room = `document:${docId}`;
+            console.log("doc-change-client received for docId:", docId, "by user:", socket.user?.id);
+
+            socket
+                .to(room)
+                .emit("doc-change-from-other-client:launch", { docId, delta, userId: socket.user?.id });
             // Validation & autorisation rapide
-            console.log("doc-change-client received for docId:", docId , "by user:", socket.user?.id);
             if (!socket.rooms.has(room)) {
                 console.log(
                     "user",
@@ -278,14 +283,14 @@ io.on("connection", (socket) => {
                     docId,
                     " - not_exist"
                 );
+                socket
+                    .to(room)
+                    .emit("doc-change-from-other-client:end", { ok: false, docId, delta, userId: socket.user?.id });
                 return respond({ ok: false, reason: "not_exist" }, cb);
             }
 
             saveDocumentContent(socket.user, docId, delta.newText.text);
             // Broadcast à la room (sauf l'émetteur)
-            socket
-                .to(room)
-                .emit("doc-change-server", { docId, delta, userId: socket.user?.id });
             console.log(
                 "user",
                 socket.id,
@@ -298,32 +303,38 @@ io.on("connection", (socket) => {
                 docId,
                 " - success"
             );
+            socket
+                .to(room)
+                .emit("doc-change-from-other-client:end", { ok: true, docId, delta, userId: socket.user?.id });
             return respond({ ok: true, delta, userId: socket.user?.id }, cb);
         } catch (error) {
             console.error("Error in join-document:", error);
+            socket
+                .to(room)
+                .emit("doc-change-from-other-client:end", { ok: false, docId, delta, userId: socket.user?.id });
             return respond({ ok: false, reason: "internal_error" }, cb);
         }
     });
 
     socket.on("position-update", async ({ docId, userId, start, end, direction }, cb) => {
-      try{
-        console.log("position-update received for docId:", docId, "by user:", socket.user?.id);
-        if(!docId || !userId || !start || !end || ! direction){
-          return respond({ ok: false, reason: "invalid_informations" }, cb)
+        try {
+            console.log("position-update received for docId:", docId, "by user:", socket.user?.id);
+            if (!docId || !userId || !start || !end || !direction) {
+                return respond({ ok: false, reason: "invalid_informations" }, cb)
+            }
+
+            const room = `document:${docId}`;
+            if (!socket.rooms.has(room)) {
+                console.log("user", socket.id, "position-update rejected (not in room)", room);
+                return respond({ ok: false, reason: "not_joined" }, cb);
+            }
+            socket.to(room).emit("position-update", { docId, userId, start, end, direction })
+            return respond({ ok: true }, cb);
+        } catch (error) {
+            console.error("Error in position-update:", error);
+            return respond({ ok: false, reason: "internal_error" }, cb);
         }
 
-        const room = `document:${docId}`;
-        if (!socket.rooms.has(room)) {
-          console.log("user", socket.id, "position-update rejected (not in room)", room);
-          return respond({ ok: false, reason: "not_joined" }, cb);
-        }
-        socket.to(room).emit("position-update", { docId, userId, start, end, direction})
-        return respond({ ok: true }, cb);
-      } catch (error) {
-        console.error("Error in position-update:", error);
-        return respond({ ok: false, reason: "internal_error" }, cb);
-      }
-      
     })
 
     socket.on("chat:new-message", async ({ docId, message }, cb) => {
@@ -350,9 +361,9 @@ io.on("connection", (socket) => {
             );
             const existingAuthor =
                 persistedMessage &&
-                typeof persistedMessage === "object" &&
-                persistedMessage.author &&
-                typeof persistedMessage.author === "object"
+                    typeof persistedMessage === "object" &&
+                    persistedMessage.author &&
+                    typeof persistedMessage.author === "object"
                     ? persistedMessage.author
                     : {};
             const enrichedAuthor = {
@@ -518,7 +529,7 @@ io.on("connection", (socket) => {
 eventBus.on("document:saved", (doc) => {
     try {
         const room = `document:${doc.id}`;
-        console.log("Broadcasting document:saved to room:", room, "last_modified_by_id", doc.last_modified_by_id, "by", doc.last_modified_by);
+        console.log("Broadcasting document:saved to room:", room, "last_modified_at", doc.last_modified_at, "by", doc.last_modified_by_id);
         io.to(room).emit("document:saved", doc);
     } catch (err) {
         console.error("Failed to broadcast document:saved", err);

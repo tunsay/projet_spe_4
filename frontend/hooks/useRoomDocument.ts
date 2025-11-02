@@ -1,9 +1,14 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Socket } from "./useSocket";
 import { normalizeMessageRecord, upsertMessage } from "@/utils/message";
-import { ChatMessageEntry, DocumentDetail } from "@/types/documents";
-import { SessionParticipantEntry } from "@/types/documents";
+import {
+    ChatMessageEntry,
+    DocumentDetail,
+    SaveState,
+    SessionParticipantEntry
+} from "@/types/documents";
 import { fetchParticipants } from "@/api/participant";
+
 type InitialState = DocumentDetail;
 
 type PresenceEvent = {
@@ -14,6 +19,7 @@ type PresenceEvent = {
 };
 
 type DocChangeEvent = {
+    ok: boolean;
     docId: string;
     delta: Delta;
     userId: string;
@@ -33,7 +39,12 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     const [lastPresence, setLastPresence] = useState<PresenceEvent | null>(
         null
     );
-    const [currentSelection, setCurrentSelection] = useState<{start: number; end: number} | null>(null);
+
+    const [author, setAuthor] = useState<string>("");
+    const [saveState, setSaveState] = useState<SaveState>("idle");
+    const [persistedContent, setPersistedContent] = useState<string>("");
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+    const [currentSelection, setCurrentSelection] = useState<{ start: number; end: number } | null>(null);
     const [joinError, setJoinError] = useState<string | null>(null);
     const [messagesListState, setMessagesListState] =
         useState<ChatMessageEntry[]>([]);
@@ -80,6 +91,21 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         },
         []
     );
+
+    const saveIndicator = useMemo(() => {
+        switch (saveState) {
+            case "saving":
+                return "Enregistrement…";
+            case "saved":
+                return "Enregistré";
+            case "error":
+                return "Erreur de sauvegarde";
+            default:
+                return content === persistedContent
+                    ? "À jour"
+                    : "Modifications en attente";
+        }
+    }, [saveState, content, persistedContent]);
 
     const refreshMessagesFromReactions = useCallback(() => {
         setMessagesListState((prev) => applyReactionsToMessages(prev));
@@ -292,6 +318,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             if (payload.ok === true) {
                 setJoined(true);
                 setInitialState(payload.initialState ?? null);
+                //setAuthor(payload.author || "Unknown");
                 setMembersCount(
                     typeof payload.membersCount === "number"
                         ? payload.membersCount
@@ -322,10 +349,21 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             })
         };
 
-        const handleDocChange = (payload: DocChangeEvent) => {
+        const docChangeFromOtherClientEnd = (payload: DocChangeEvent) => {
             if (!mounted) return;
             if (payload.docId === documentId) {
-                applyDeltaToContent(payload.delta);
+                if (payload.ok === false) {
+                    setSaveState("error");
+                } else {
+                    applyDeltaToContent(payload.delta);
+                }
+            }
+        };
+
+        const docChangeFromOtherClientLaunch = (payload: Omit<DocChangeEvent, "ok">) => {
+            if (!mounted) return;
+            if (payload.docId === documentId) {
+                setSaveState("saving");
             }
         };
 
@@ -380,11 +418,28 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             }
         }
 
+        const handleDocumentSaved = (payload: DocumentDetail) => {
+            if (!mounted) return;
+            if (payload.id === documentId) {
+                setPersistedContent(payload.content ?? "");
+                setLastSavedAt(payload.last_modified_at ? new Date(payload.last_modified_at) : null);
+                if (initialState && payload.last_modified_at) {
+                    setInitialState({
+                        ...initialState,
+                        last_modified_at: payload.last_modified_at,
+                    })
+                }
+            }
+            setSaveState("saved");
+        };
+
         // Listen for events using the useSocket-provided helpers so listeners are
         // attached to the current shared socket reference.
         socket.on("message", handlePossibleJoinPayload);
         socket.on("presence", handlePresence);
-        socket.on("doc-change-server", handleDocChange);
+        socket.on("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
+        socket.on("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
+        socket.on("document:saved", handleDocumentSaved);
         socket.on("position-update", handlePositionUpdate);
         socket.on("chat:new-message", handleIncomingMessage);
         socket.on("chat:reaction", handleIncomingReaction);
@@ -398,7 +453,9 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
             try {
                 socket.off("message", handlePossibleJoinPayload);
                 socket.off("presence", handlePresence);
-                socket.off("doc-change-server", handleDocChange);
+                socket.off("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
+                socket.off("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
+                socket.off("document:saved", handleDocumentSaved);
                 socket.off("position-update", handlePositionUpdate);
                 socket.off("chat:new-message", handleIncomingMessage);
                 socket.off("chat:reaction", handleIncomingReaction);
@@ -414,9 +471,10 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         if (!initialState) return;
 
         setContent(initialState.content ?? "");
+        setPersistedContent(initialState.content ?? "");
     }, [initialState]);
 
-   const diffString = (oldText: string, newText: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => {
+    const diffString = (oldText: string, newText: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => {
         const startNewText = selectionDirection === "forward" ? selectionStart : selectionEnd;
         const endNewText = selectionDirection === "forward" ? selectionEnd : selectionStart;
         return {
@@ -427,6 +485,8 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
     const updateContent = useCallback(
         (newContent: string, selectionStart: number, selectionEnd: number, selectionDirection: "forward" | "backward" | "none") => {
             if (!socket) return;
+            if (newContent === content) return;
+            setSaveState("saving");
             const delta = diffString(content, newContent, selectionStart, selectionEnd, selectionDirection);
             socket.emit(
                 "doc-change-client",
@@ -437,7 +497,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
                         updateParticipantSelection(userId, delta.newText.start, delta.newText.end);
                         setCurrentSelection({ start: delta.newText.start, end: delta.newText.end });
                     } else {
-                        console.log("Content update rejected by server");
+                        setSaveState("error");
                     }
                 }
             );
@@ -697,12 +757,22 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         [socket, documentId, applyReactionDiff]
     );
 
+    const initialize = useCallback((doc: DocumentDetail | null) => {
+        if (!doc) return;
+        setInitialState(doc);
+        setContent(doc.content ?? "");
+        setPersistedContent(doc.content ?? "");
+        setLastSavedAt(
+            doc.last_modified_at ? new Date(doc.last_modified_at) : null
+        );
+    }, []);
+
     return {
         joined,
         initialState,
         content,
         setContent: updateContent,
-        setInitialState,
+        setInitialState: initialize,
         membersCount,
         lastPresence,
         joinError,
@@ -717,5 +787,11 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         setMessagesList,
         currentSelection,
         setCurrentSelection,
+        saveState,
+        saveIndicator,
+        lastSavedAt,
+        setLastSavedAt,
+        author,
+        setAuthor,
     };
 }

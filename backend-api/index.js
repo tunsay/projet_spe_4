@@ -106,7 +106,7 @@ app.use("/api/messages", auth, messageRoutes); // Routes de messages (nécessite
 app.use("/api/sessions", auth, sessionsRoutes); // Routes des participants de sessions (nécessite d'être connecté)
 
 // --- Gestion des Erreurs et 404 ---
-app.use("/api", (_req, res) => res.status(404).json({ error: "Not Found" }));
+app.use("/api", (_req, res) => res.status(404).json({ error: "Route not Found" }));
 
 app.use((err, _req, res, _next) => {
     console.error("[error]", err);

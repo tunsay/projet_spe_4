@@ -40,6 +40,44 @@ const getUserProfile = async (req, res) => {
 };
 
 /**
+ * Récupère un utilisateur par son ID (accessible via req.params.id).
+ */
+const getUserById = async (req, res) => {
+    try {
+        const idParam = req.params.id;
+        if (!idParam) {
+            return res.status(400).json({ message: "ID utilisateur requis." });
+        }
+
+        const user = await User.findByPk(idParam, {
+            attributes: [
+                "id",
+                "email",
+                "display_name",
+                "role",
+                "is_two_factor_enabled",
+                "created_at",
+            ],
+        });
+        if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé." });
+        }
+
+        res.status(200).json({
+            id: user.id,
+            name: user.display_name,
+            email: user.email,
+            role: user.role,
+            isTwoFactorEnabled: user.is_two_factor_enabled,
+            createdAt: user.created_at,
+        });
+    } catch (error) {
+        console.error("Erreur de récupération de l'utilisateur par ID:", error);
+        res.status(500).json({ message: "Erreur serveur interne." });
+    }
+};
+
+/**
  * Première étape de la configuration 2FA:
  * Génère un secret et un code QR temporaires.
  */
@@ -270,4 +308,5 @@ module.exports = {
     activateTwoFactor,
     disableTwoFactor,
     updateUserProfile,
+    getUserById
 };
