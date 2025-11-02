@@ -1013,14 +1013,37 @@ function Breadcrumbs({
     path: DocumentNode[];
     onNavigate: (id: string | null) => void;
 }) {
+    const hasParent = path.length > 0;
+    const parentId = path.length > 1 ? path[path.length - 2].id : null;
+
     return (
-        <nav className="text-slate-500 text-xs">
+        <nav className="flex items-center gap-2 text-slate-500 text-xs">
             <span
                 className="font-medium text-indigo-600 hover:text-indigo-800 cursor-pointer"
                 onClick={() => onNavigate(null)}
             >
                 Racine
             </span>
+            {hasParent && (
+                <button
+                    onClick={() => onNavigate(parentId)}
+                    className="inline-flex justify-center items-center w-5 h-5 text-indigo-600 hover:text-indigo-800 transition"
+                    title="Aller au dossier parent"
+                    aria-label="Aller au dossier parent"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                </button>
+            )}
             {path.map((item) => (
                 <span key={item.id} className="ml-1">
                     <span className="mx-1">/</span>
@@ -1047,14 +1070,12 @@ function FolderTree({
     onSelect: (id: string) => void;
     depth?: number;
 }) {
-    if (!nodes.length) {
-        return (
-            depth === 0 && (
-                <p className="text-slate-400 text-xs">
-                    Aucun dossier pour l`&apos`instant.
-                </p>
-            )
-        );
+    // Afficher le message uniquement si aucun dossier n'existe (même si des fichiers/textes sont présents).
+    const hasFolder = nodes.some((n) => n.type === "folder");
+    if (!nodes.length || !hasFolder) {
+        return depth === 0 ? (
+            <p className="text-slate-400 text-xs">Aucun dossier pour l'instant.</p>
+        ) : null;
     }
 
     return (
@@ -1072,7 +1093,7 @@ function FolderTree({
                             }`}
                         >
                             <span>📁</span>
-                            <span className="truncate">{node.name}</span>
+                            <span className="text-slate-900 dark:text-white truncate">{node.name}</span>
                         </button>
                         {node.children?.length ? (
                             <FolderTree
