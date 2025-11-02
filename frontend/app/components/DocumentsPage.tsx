@@ -238,8 +238,13 @@ export default function DocumentsPage() {
     const handleOpen = async (doc: DocumentNode) => {
         if (doc.type === "folder") {
             setCurrentFolderId(doc.id);
-        } else {
+        } else if (doc.type === "text") {
             router.push(`/documents/${doc.id}`);
+        } else if (doc.type === "file") {
+            const downloadUrl = getDownloadUrl(doc);
+            if (downloadUrl) {
+                window.open(downloadUrl, "_blank");
+            }
         }
     };
 
