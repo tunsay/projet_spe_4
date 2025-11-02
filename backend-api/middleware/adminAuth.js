@@ -22,7 +22,7 @@ function auth(req, res, next) {
             if (!user || user.role !== "admin") {
                 return res.status(401).json({ message: "Non autorisé" });
             }
-
+            req.userId = decoded.userId;
             next();
         } catch (dbError) {
             console.error("Erreur vérification admin:", dbError);

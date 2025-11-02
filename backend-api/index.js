@@ -100,7 +100,7 @@ app.use("/api/auth", authRoutes); // Authentification (login, register)
 // Il est essentiel pour toutes les routes de profil qui nécessitent l'utilisateur connecté.
 app.use("/api/profile", auth, profileRoutes); // Profil utilisateur (nécessite d'être connecté)
 
-app.use("/api/admin", adminRoutes); // Routes d'administration (nécessite d'être admin)
+app.use("/api/admin", adminAuth, adminRoutes); // Routes d'administration (nécessite d'être admin)
 app.use("/api/documents", auth, documentRoutes); // Routes de documents (nécessite d'être connecté)
 app.use("/api/messages", auth, messageRoutes); // Routes de messages (nécessite d'être connecté)
 app.use("/api/sessions", auth, sessionsRoutes); // Routes des participants de sessions (nécessite d'être connecté)
