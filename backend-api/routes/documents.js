@@ -1104,7 +1104,7 @@ router.post("/file", upload.single("file"), async (req, res) => {
     const { parent_id } = req.body;
     
     // Récupérer l'owner_id depuis le token JWT ou header
-    let owner_id = req.headers["user-id"];
+    let owner_id = req.userId;
     
     if (!owner_id) {
       return res.status(401).json({ error: "User ID requis (header: user-id)" });
