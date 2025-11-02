@@ -11,6 +11,7 @@
 7. [Base de Données](#base-de-données)
 8. [Sécurité](#sécurité)
 9. [Fonctionnalités Détaillées](#fonctionnalités-détaillées)
+10. [Flux d'Exécution](#flux-dexécution)
 
 ---
 
@@ -21,10 +22,11 @@ WikiDrive est une plateforme collaborative en temps réel permettant de gérer d
 ### Objectifs du Projet
 
 - Fournir une plateforme collaborative sécurisée
-- Permettre l'édition en temps réel de documents
+- Permettre l'édition en temps réel de documents textuels
 - Gérer une hiérarchie de dossiers et fichiers
 - Implémenter un système d'authentification robuste avec 2FA
-- Offrir un système de permissions granulaire
+- Offrir un système de permissions granulaire (read, edit, owner)
+- Permettre l'upload et le téléchargement de fichiers
 
 ---
 
@@ -43,7 +45,7 @@ projet_spe_4/
 ├── DOCUMENTATION.md          # Ce fichier
 ├── backend-api/              # API REST (Express + PostgreSQL)
 │   ├── config/
-│   │   └── db.js            # Configuration Sequelize avec pool de connexions
+│   │   └── db.js            # Configuration Sequelize + Pool PostgreSQL
 │   ├── controllers/         # Logique métier
 │   │   ├── authController.js              # Login, Register, 2FA
 │   │   ├── userController.js              # Profil utilisateur
@@ -64,7 +66,7 @@ projet_spe_4/
 │   │   ├── auth.js          # Routes d'authentification
 │   │   ├── profile.js       # Routes de profil utilisateur
 │   │   ├── admin.js         # Routes d'administration
-│   │   ├── documents.js     # CRUD documents
+│   │   ├── documents.js     # CRUD documents + permissions
 │   │   ├── sessions.js      # Sessions de collaboration
 │   │   └── messages.js      # Messages de chat
 │   ├── services/
@@ -84,7 +86,7 @@ projet_spe_4/
 │   ├── index.js           # Point d'entrée Socket.IO
 │   ├── Dockerfile
 │   └── package.json
-├── frontend/               # Application Next.js
+├── frontend/               # Application Next.js 14
 │   ├── app/
 │   │   ├── (auth)/        # Groupe de routes sans layout principal
 │   │   │   └── login/
@@ -96,13 +98,21 @@ projet_spe_4/
 │   │   │   │   └── page.tsx # Panel d'administration
 │   │   │   ├── documents/
 │   │   │   │   ├── page.tsx # Liste des documents
+│   │   │   │   ├── _components/
+│   │   │   │   │   ├── DocumentTextSection.tsx
+│   │   │   │   │   ├── CollaborationSidebar.tsx
+│   │   │   │   │   ├── InviteCollaboratorModal.tsx
+│   │   │   │   │   └── ...
 │   │   │   │   └── [id]/
 │   │   │   │       └── page.tsx # Éditeur collaboratif
 │   │   │   └── profile/
-│   │   │       └── page.tsx # Profil utilisateur & 2FA
+│   │   │       ├── page.tsx # Profil utilisateur & gestion
+│   │   │       └── 2fa/
+│   │   │           └── page.tsx # Page dédiée 2FA
 │   │   ├── components/    # Composants réutilisables
 │   │   │   ├── Header.tsx
-│   │   │   └── DocumentsPage.tsx
+│   │   │   ├── DocumentsPage.tsx
+│   │   │   └── ...
 │   │   ├── globals.css
 │   │   └── layout.tsx     # Layout racine
 │   ├── hooks/             # Hooks personnalisés
@@ -118,9 +128,12 @@ projet_spe_4/
 │   │   └── message.ts
 │   ├── public/            # Assets statiques
 │   ├── middleware.ts      # Middleware Next.js (auth)
+│   ├── envConfig.ts       # Chargement des variables d'env
+│   ├── load-env.mjs       # Script pour charger .env avant dev
 │   ├── Dockerfile
 │   ├── .env.local        # Variables d'env (dev)
 │   ├── .env.production   # Variables d'env (prod)
+│   ├── .env.example      # Template des variables
 │   ├── next.config.ts
 │   ├── tsconfig.json
 │   └── package.json
@@ -138,10 +151,11 @@ projet_spe_4/
          │
          ▼
 ┌─────────────────────────────────────┐
-│   Frontend (Next.js - Port 8081)   │
-│   - React Components               │
+│   Frontend (Next.js - Port 3000)   │
+│   - React Components (TypeScript)  │
 │   - Socket.IO Client               │
-│   - Middleware Auth                │
+│   - Middleware Auth (Next.js)      │
+│   - Locale: FR                     │
 └────────┬────────────────────────────┘
          │
          ├──────────────┬──────────────┐
@@ -156,6 +170,7 @@ projet_spe_4/
 │ - Sequelize│ │ - Temps réel │       │
 │ - JWT      │ │ - Chat       │       │
 │ - Swagger  │ │ - Collab     │       │
+│ - Multer   │ │ - Présence   │       │
 └─────────────┘ └──────┬───────┘       │
        │                │              │
        └────────────────┴──────────────┘
@@ -174,15 +189,6 @@ projet_spe_4/
 - **Maintenance** : Code plus facile à maintenir et à tester
 - **Spécialisation** : Chaque service a une responsabilité claire
 - **Déploiement** : Possibilité de déployer/mettre à jour les services séparément
-
-**Avantages** :
-- Meilleure isolation des erreurs
-- Performances optimisées par service
-- Équipes peuvent travailler en parallèle
-
-**Inconvénients** :
-- Complexité accrue de l'infrastructure
-- Nécessite une orchestration (Docker Compose)
 
 ### 2. Séparation Backend API / WebSocket
 
@@ -203,8 +209,18 @@ projet_spe_4/
 - **Layouts imbriqués** : Header uniquement sur les pages authentifiées
 - **File-based routing** : Structure intuitive et conventionnelle
 - **Middleware** : Protection des routes au niveau du routing
+- **TypeScript** : Support natif
 
-### 4. Gestion des Variables d'Environnement
+### 4. Approche Hybride ORM + Pool Brut
+
+**Décision** : Utilisation conjointe de Sequelize ORM et PostgreSQL Pool brut
+
+**Raisons** :
+- **Sequelize** : Pour models, associations, et CRUD standards
+- **Pool brut** : Pour requêtes complexes (hiérarchie, CTEs, etc.)
+- **Flexibilité** : Choisir l'outil le plus approprié par besoin
+
+### 5. Gestion des Variables d'Environnement
 
 **Décision** : Fichiers `.env` séparés pour dev et prod
 
@@ -212,11 +228,7 @@ projet_spe_4/
 - `.env` (racine) : Variables backend (DB, JWT, ports)
 - `frontend/.env.local` : Variables frontend en dev
 - `frontend/.env.production` : Variables frontend en prod
-
-**Avantages** :
-- Configuration claire par environnement
-- Sécurité (fichiers non versionnés)
-- Facilité de déploiement
+- `load-env.mjs` : Script pour charger `.env` avant `next dev`
 
 ---
 
@@ -239,21 +251,18 @@ projet_spe_4/
 - **ACID** : Garanties transactionnelles
 - **Types avancés** : Support des ENUM, UUID, JSON
 - **Performance** : Optimisations pour les requêtes complexes
-- **Open Source** : Gratuit et bien documenté
+- **CTEs récursives** : Pour hiérarchies de documents
 
-**Alternatives considérées** :
-- MySQL : Moins de fonctionnalités avancées
-- MongoDB : Pas adapté pour les relations complexes
-
-#### Sequelize ORM
+#### Sequelize ORM + PostgreSQL Pool
 
 **Raisons** :
-- **Abstraction** : Pas de SQL manuel
+- **Abstraction** : Pas de SQL manuel pour requêtes simples
 - **Migrations** : Gestion des changements de schéma
 - **Validation** : Validation des données au niveau modèle
 - **Relations** : Gestion simple des associations
+- **Pool brut** : Pour requêtes complexes (hiérarchies)
 
-**Configuration spécifique** :
+**Configuration** :
 ```javascript
 // Pool de connexions pour optimiser les performances
 pool: {
@@ -275,12 +284,6 @@ pool: {
 - **Middleware** : Protection des routes native
 - **TypeScript** : Support natif
 
-**Avantages spécifiques** :
-- Layouts imbriqués
-- Loading states automatiques
-- Error boundaries
-- Streaming avec Suspense
-
 #### TypeScript
 
 **Raisons** :
@@ -296,7 +299,6 @@ pool: {
 - **Dark mode** : Support natif
 - **Responsive** : Classes responsives intégrées
 - **Personnalisation** : Configuration flexible
-- **Petite taille** : Purge du CSS non utilisé
 
 ### 3. Temps Réel
 
@@ -304,14 +306,31 @@ pool: {
 
 **Raisons** :
 - **WebSocket + Fallback** : Support des anciens navigateurs
-- **Rooms** : Gestion simple des channels
+- **Rooms** : Gestion simple des channels (par document)
 - **Events** : Système d'événements flexible
 - **Reconnexion** : Automatique
 - **Broadcasting** : Facile d'envoyer à plusieurs clients
 
-**Alternatives considérées** :
-- WebSocket natif : Pas de fallback HTTP
-- Server-Sent Events : Unidirectionnel uniquement
+**Événements implémentés** :
+
+```javascript
+// Client → Serveur
+socket.on('join-document', ({ docId }, callback)     // Rejoindre un document
+socket.on('leave-document', ({ docId }, callback)    // Quitter un document
+socket.on('doc-change-client', ({ docId, delta }, callback)  // Édition
+socket.on('message', { sessionId, content })         // Message de chat
+socket.on('reaction', { messageId, emoji })          // Réaction emoji
+
+// Serveur → Client
+socket.on('doc-change-from-other-client:launch', ...)     // Édition lancée
+socket.on('doc-change-from-other-client:end', ...)        // Édition finalisée
+socket.on('presence', { type, userId, ... })             // Présence utilisateur
+socket.on('chat:new-message', (message) => {})           // Nouveau message
+socket.on('chat:reaction', (reaction) => {})             // Nouvelle réaction
+socket.on('position-update', (positions) => {})          // Curseurs des collaborateurs
+socket.on('document:saved', (payload) => {})             // Document sauvegardé
+socket.on('message', (payload) => {})                     // Message de présence
+```
 
 ### 4. Authentification
 
@@ -325,17 +344,43 @@ pool: {
 
 **Implémentation** :
 - Stockage dans cookies HttpOnly (protection XSS)
-- Expiration courte (24h)
-- Refresh sur chaque requête valide
+- Expiration : 1h (cookie)
+- Signature avec secret fort (JWT_SECRET)
+- Vérification sur chaque requête protégée
+- Token non-HttpOnly également stocké pour WebSocket
 
-#### Speakeasy (2FA)
+#### 2FA (TOTP) avec Speakeasy
 
 **Raisons** :
 - **TOTP standard** : Compatible Google Authenticator, Authy, etc.
 - **QR Code** : Génération intégrée
 - **Simple** : API intuitive
+- **RFC 6238** : Protocole standardisé
 
-### 5. Documentation API
+**Flow** :
+1. Setup : Génération secret + QR code
+2. Activate : Vérification code TOTP + activation DB
+3. Login : Vérification code à chaque connexion (si activé)
+4. Disable : Désactivation + suppression secret
+
+### 5. Gestion des Fichiers
+
+#### Multer
+
+**Raisons** :
+- **Upload multipart** : Gestion native des fichiers
+- **Contrôle** : Validation de taille et type
+- **Intégration** : Facile avec Express
+
+**Configuration** :
+```javascript
+const upload = multer({ 
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+});
+```
+
+### 6. Documentation API
 
 #### Swagger / OpenAPI
 
@@ -352,27 +397,22 @@ pool: {
 ### 1. Pattern MVC Adapté
 
 **Structure** :
-- **Models** : Sequelize (ORM)
-- **Controllers** : Logique métier
-- **Routes** : Points d'entrée API
-- **Services** : Logique métier réutilisable
-
-**Avantages** :
-- Séparation des responsabilités
-- Testabilité
-- Réutilisabilité
+- **Models** : Sequelize (ORM) + Pool PostgreSQL (requêtes brutes)
+- **Controllers** : Logique métier (validation, orchestration)
+- **Routes** : Points d'entrée API (Express)
+- **Services** : Logique métier réutilisable (2FA)
 
 ### 2. Middleware Chain
 
 **Architecture** :
 ```
-Request → Auth Middleware → Admin Middleware (optionnel) → Controller → Response
+Request → Auth Middleware (JWT) → Admin Middleware (optionnel) → Controller → Response
 ```
 
 **Middleware d'authentification** :
-- Vérifie le token JWT
+- Vérifie le token JWT depuis les cookies
 - Extrait userId du token
-- Injecte userId dans req.userId
+- Injecte userId dans `req.userId`
 
 **Middleware admin** :
 - Vérifie le rôle de l'utilisateur
@@ -382,38 +422,46 @@ Request → Auth Middleware → Admin Middleware (optionnel) → Controller → 
 
 **Approche centralisée** :
 - Try/catch dans chaque controller
-- Messages d'erreur cohérents
+- Messages d'erreur cohérents en français
 - Logs serveur pour debugging
 - Codes HTTP appropriés
 
 **Codes de statut utilisés** :
-- 200 : Succès
-- 201 : Création réussie
-- 400 : Requête invalide
-- 401 : Non authentifié
-- 403 : Non autorisé (permissions)
-- 404 : Ressource non trouvée
-- 409 : Conflit (ex: email déjà utilisé)
-- 440 : Code TOTP invalide (custom)
-- 500 : Erreur serveur
+- `200` : Succès
+- `201` : Création réussie
+- `204` : Suppression réussie (no content)
+- `400` : Requête invalide
+- `401` : Non authentifié
+- `403` : Non autorisé (permissions/2FA/bloqué)
+- `404` : Ressource non trouvée
+- `409` : Conflit (ex: email déjà utilisé)
+- `440` : Code TOTP invalide (custom)
+- `500` : Erreur serveur
 
 ### 4. Système de Permissions
 
 **Modèle RBAC (Role-Based Access Control)** :
 
-**Rôles** :
+**Rôles utilisateur** :
 - `user` : Utilisateur standard
-- `admin` : Administrateur
+- `admin` : Administrateur (gestion globale)
 
 **Permissions sur documents** :
 - `read` : Lecture seule
 - `edit` : Lecture + écriture
 - `owner` : Toutes les permissions + gestion des accès
 
+**Hiérarchie d'accès** :
+- Propriétaire : Tous droits
+- Éditeur (edit) : Peut modifier contenu + chat
+- Lecteur (read) : Lecture seule
+- Parent inheritance : Permissions sur dossier parent donnent accès aux enfants
+
 **Logique** :
 - Le propriétaire peut tout faire
 - Les permissions sont stockées dans `document_permissions`
 - Vérification à chaque accès au document
+- Accès récursif aux parents pour permissions implicites
 
 ### 5. Architecture de la Collaboration Temps Réel
 
@@ -428,14 +476,25 @@ Document → CollaborationSession → SessionParticipants → Messages
 3. Devient participant de la session
 4. Peut envoyer/recevoir des messages
 5. Peut éditer le document en temps réel
+6. Les changements sont synchronisés via WebSocket
 
-**Événements Socket.IO** :
-- `join-room` : Rejoindre une room
-- `leave-room` : Quitter une room
-- `document-update` : Mise à jour du document
-- `message` : Nouveau message de chat
-- `reaction` : Réaction à un message
-- `participants-update` : Changement de participants
+**État persisté en DB** :
+- Contenu du document (table `documents.content`)
+- Messages de chat (table `messages`)
+- Sessions actives (table `collaboration_sessions`)
+- Participants actifs (table `session_participants`)
+
+### 6. Hiérarchie de Documents
+
+**Structure** :
+- **Dossiers** : type=`folder`, parent_id peut pointer à un autre dossier
+- **Documents textes** : type=`text`, content stocké en DB
+- **Fichiers** : type=`file`, file_path stocké, mime_type enregistré
+
+**Navigation** :
+- Racine : parent_id = null
+- Enfants d'un dossier : parent_id = folder.id
+- Requête hiérarchique : CTE récursive PostgreSQL
 
 ---
 
@@ -445,97 +504,133 @@ Document → CollaborationSession → SessionParticipants → Messages
 
 **Responsabilités** :
 - Authentification (Login, Register, 2FA)
-- Gestion des utilisateurs (CRUD, profil)
-- Gestion des documents (CRUD, upload, permissions)
-- Administration (gestion utilisateurs, création admin)
+- Gestion des utilisateurs (CRUD, profil, admin)
+- Gestion des documents (CRUD, upload, permissions, hiérarchie)
+- Administration (gestion utilisateurs, blocage, création admin)
 - Validation des données
 - Persistance en base de données
 
-**Endpoints principaux** :
+**Endpoints** :
+
 ```
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/verify-2fa
-POST   /api/auth/logout
+# Authentification
+POST   /api/auth/register          # Créer un compte
+POST   /api/auth/login             # Connexion
+POST   /api/auth/verify-2fa        # Vérifier code TOTP au login
+POST   /api/auth/logout            # Déconnexion
 
-GET    /api/profile
-PUT    /api/profile
-POST   /api/profile/2fa-setup
-POST   /api/profile/2fa-activate
-POST   /api/profile/2fa-disable
+# Profil utilisateur
+GET    /api/profile                 # Récupérer profil
+PUT    /api/profile                 # Mettre à jour profil (nom, email, password)
+POST   /api/profile/2fa-setup       # Générer secret + QR code
+POST   /api/profile/2fa-activate    # Activer 2FA
+POST   /api/profile/2fa-disable     # Désactiver 2FA
 
-GET    /api/documents
-POST   /api/documents
-GET    /api/documents/:id
-PUT    /api/documents/:id
-DELETE /api/documents/:id
-POST   /api/documents/upload
-POST   /api/documents/:id/invite
+# Documents
+GET    /api/documents               # Liste hiérarchique complète
+POST   /api/documents               # Créer dossier ou document texte
+GET    /api/documents/:id           # Détails d'un document
+GET    /api/documents/:id/download  # Télécharger un fichier
+PUT    /api/documents/:id           # Modifier contenu texte
+PUT    /api/documents/:id/metadata  # Renommer/déplacer
+PUT    /api/documents/file/:id      # Remplacer un fichier
+DELETE /api/documents/:id           # Supprimer
+POST   /api/documents/file          # Upload fichier
+GET    /api/documents/:id/permissionByUser  # Vérifier permission utilisateur
+POST   /api/documents/:id/invite    # Inviter collaborateur
 
-GET    /api/admin/users
-POST   /api/admin/create-admin
+# Messages de chat
+GET    /api/messages/:id            # Récupérer messages d'une session
+POST   /api/messages/:id            # Envoyer message
+PUT    /api/messages/:id            # Modifier message
+DELETE /api/messages/:id            # Supprimer message
+
+# Sessions de collaboration
+GET    /api/sessions/:id/participants  # Lister participants
+POST   /api/sessions/:id/participants  # Ajouter participant
+
+# Administration
+GET    /api/admin/users             # Lister tous les utilisateurs
+POST   /api/admin/users             # Créer utilisateur (admin)
+PUT    /api/admin/users/:id/block   # Bloquer utilisateur
+PUT    /api/admin/users/:id/unblock # Débloquer utilisateur
+PUT    /api/admin/changepassword    # Changer mot de passe d'un utilisateur
 ```
 
 ### Backend WebSocket (Port 3001)
 
 **Responsabilités** :
 - Gestion des connexions WebSocket
-- Broadcasting des événements
+- Broadcasting des événements en temps réel
 - Gestion des rooms (par document)
-- Messages de chat en temps réel
 - Synchronisation des éditions collaboratives
 - Gestion de la présence des participants
+- Messages de chat instantanés
+- Réactions emoji
 
 **Événements** :
+
 ```javascript
 // Client → Serveur
-socket.emit('join-room', { documentId, userId })
-socket.emit('leave-room', { documentId })
-socket.emit('document-update', { documentId, content })
-socket.emit('message', { sessionId, content })
-socket.emit('reaction', { messageId, emoji })
+socket.on('join-document', { docId }, callback)
+socket.on('leave-document', { docId }, callback)
+socket.on('doc-change-client', { docId, delta }, callback)
+socket.on('message', { sessionId, content })
+socket.on('reaction', { messageId, emoji })
 
-// Serveur → Client
-socket.on('participants-update', (participants) => {})
-socket.on('new-message', (message) => {})
-socket.on('document-changed', (content) => {})
-socket.on('user-joined', (user) => {})
-socket.on('user-left', (userId) => {})
+// Serveur → Client (broadcast)
+socket.on('doc-change-from-other-client:launch', { docId, delta, userId })
+socket.on('doc-change-from-other-client:end', { ok, docId, delta, userId })
+socket.on('presence', { type, userId, displayName, ... })
+socket.on('chat:new-message', (message))
+socket.on('chat:reaction', (reaction))
+socket.on('position-update', (positions))
+socket.on('document:saved', (payload))
+socket.on('message', (payload))  // Présence générale
 ```
 
-### Frontend (Port 8081 / 3000)
+### Frontend (Port 3000 / Dev)
 
 **Responsabilités** :
-- Interface utilisateur
-- Authentification côté client
-- Appels API REST
-- Connexion WebSocket
+- Interface utilisateur (React + TypeScript)
+- Authentification côté client (JWT cookies)
+- Appels API REST (fetch avec credentials)
+- Connexion WebSocket (Socket.IO client)
 - Gestion d'état local
 - Routing et navigation
-- Validation côté client
+- Validation côté client (UX)
+- Intégration 2FA
 
 **Pages principales** :
+- `/` : Dashboard accueil
 - `/login` : Connexion
-- `/` : Dashboard (liste des documents racine)
-- `/documents` : Liste de tous les documents
+- `/profile` : Profil utilisateur + gestion 2FA
+- `/profile/2fa` : Page dédiée 2FA post-login
+- `/documents` : Liste hiérarchique des documents
 - `/documents/[id]` : Éditeur collaboratif
-- `/profile` : Profil utilisateur et 2FA
-- `/admin` : Panel d'administration
+- `/admin` : Panel d'administration (rôle admin uniquement)
+
+**Features** :
+- Mode sombre/clair (Tailwind)
+- Locale français
+- Responsive design
+- Drag & drop (optionnel)
+- Chat avec réactions emoji
+- Présence temps réel
 
 ---
 
 ## Base de Données
 
-### Schéma
+### Types ENUM
 
-**Types ENUM** :
 ```sql
 user_role : 'user' | 'admin'
 document_type : 'folder' | 'text' | 'file'
 permission_level : 'read' | 'edit' | 'owner'
 ```
 
-**Tables** :
+### Tables
 
 #### `users`
 ```sql
@@ -543,10 +638,10 @@ id (UUID, PK)
 email (VARCHAR, UNIQUE)
 password_hash (TEXT)
 display_name (VARCHAR)
-role (user_role)
-is_blocked (BOOLEAN)
+role (user_role, default: 'user')
+is_blocked (BOOLEAN, default: false)
 two_factor_secret (VARCHAR)
-is_two_factor_enabled (BOOLEAN)
+is_two_factor_enabled (BOOLEAN, default: false)
 created_at (TIMESTAMPTZ)
 updated_at (TIMESTAMPTZ)
 ```
@@ -554,14 +649,14 @@ updated_at (TIMESTAMPTZ)
 #### `documents`
 ```sql
 id (UUID, PK)
-parent_id (UUID, FK → documents)
+parent_id (UUID, FK → documents, nullable)
 owner_id (UUID, FK → users)
 name (VARCHAR)
-type (document_type)
-content (TEXT)
-file_path (VARCHAR)
-mime_type (VARCHAR)
-last_modified_by_id (UUID, FK → users)
+type (document_type: folder|text|file)
+content (TEXT, nullable, only for text)
+file_path (VARCHAR, nullable, only for file)
+mime_type (VARCHAR, nullable, only for file)
+last_modified_by_id (UUID, FK → users, nullable)
 last_modified_at (TIMESTAMPTZ)
 created_at (TIMESTAMPTZ)
 ```
@@ -570,7 +665,7 @@ created_at (TIMESTAMPTZ)
 ```sql
 user_id (UUID, FK → users, PK composite)
 document_id (UUID, FK → documents, PK composite)
-permission (permission_level)
+permission (permission_level: read|edit|owner)
 ```
 
 #### `collaboration_sessions`
@@ -602,9 +697,9 @@ created_at (TIMESTAMPTZ)
 ```
 User 1───N Document (owner)
 User 1───N Document (last_modified_by)
-User N───N Document (document_permissions)
+User N───N Document (via document_permissions)
 
-Document 1───N Document (parent → children)
+Document 1───N Document (hiérarchie parent-enfants)
 Document 1───1 CollaborationSession
 
 CollaborationSession 1───N SessionParticipant
@@ -619,13 +714,15 @@ User 1───N Message
 ```sql
 -- Performance pour les requêtes fréquentes
 CREATE UNIQUE INDEX ON documents (parent_id, name);
+CREATE INDEX ON document_permissions (user_id);
+CREATE INDEX ON document_permissions (document_id);
 ```
 
 ### Contraintes
 
-- `ON DELETE CASCADE` : Suppression en cascade (documents, permissions, sessions)
-- `UNIQUE` : Email utilisateur, nom de document dans un dossier
-- `NOT NULL` : Champs obligatoires
+- `ON DELETE CASCADE` : Suppression en cascade (documents, permissions, sessions, messages)
+- `UNIQUE` : Email utilisateur, document_id dans collaboration_sessions
+- `NOT NULL` : Champs obligatoires (id, name, type, owner_id, user_id, etc.)
 
 ---
 
@@ -635,15 +732,17 @@ CREATE UNIQUE INDEX ON documents (parent_id, name);
 
 **JWT** :
 - Stockage dans cookies HttpOnly (protection XSS)
-- Durée de vie : 24h
-- Signature avec secret fort (JWT_SECRET)
+- Durée de vie : 1h
+- Signature avec secret fort (JWT_SECRET, min 32 chars)
 - Vérification sur chaque requête protégée
+- Token supplémentaire non-HttpOnly pour WebSocket
 
 **2FA (TOTP)** :
 - Protocole TOTP standard (RFC 6238)
 - QR Code pour configuration facile
-- Secret stocké chiffré en base
+- Secret stocké en base (non chiffré actuellement, à améliorer)
 - Validation à 2 étapes (setup → activate)
+- Code à 6 chiffres, renouvellement toutes les 30s
 - Possibilité de désactiver
 
 ### 2. Autorisation
@@ -657,10 +756,16 @@ CREATE UNIQUE INDEX ON documents (parent_id, name);
 **Middleware admin** :
 - Vérifie le rôle de l'utilisateur
 - Bloque si non-admin
+- Utilisé sur routes `/api/admin/*`
 
 **Permissions documents** :
 - Vérification à chaque accès
 - Hiérarchie : owner > edit > read
+- Support des permissions implicites via hiérarchie
+
+**Statut utilisateur** :
+- Vérification is_blocked avant opérations
+- Utilisateurs bloqués rejettent l'accès même avec token valide
 
 ### 3. Validation des Données
 
@@ -668,30 +773,46 @@ CREATE UNIQUE INDEX ON documents (parent_id, name);
 - Validation de tous les inputs
 - Sanitization des données
 - Vérification des types
-- Regex pour formats (email, etc.)
+- Regex pour formats (email: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`)
+- UUID validation: `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`
 
 **Frontend** :
 - Validation côté client (UX)
-- Double validation côté serveur
+- Double validation côté serveur (sécurité)
 
 ### 4. Protection CSRF
 
 - Utilisation de cookies SameSite
-- Vérification des origines
-- CORS configuré correctement
+- Vérification des origines (CORS)
+- CORS configuré pour dev/prod
 
 ### 5. Mot de Passe
 
 - Hash avec bcrypt (salt rounds: 10)
 - Minimum 8 caractères requis
 - Jamais stocké en clair
+- Mise à jour via `bcrypt.hash(password, 10)`
 
 ### 6. Gestion des Fichiers
 
-- Upload limité par taille
+- Upload limité par taille (50MB)
 - Vérification du MIME type
-- Stockage avec noms uniques (hash)
-- Chemin sécurisé (uploads/)
+- Stockage avec noms originaux (à améliorer avec UUID)
+- Chemin sécurisé (`uploads/`)
+- Vérification permissions avant upload
+
+### 7. CORS & Sécurité Réseau
+
+```javascript
+const CORS_ORIGINS = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "http://localhost:8081",
+    "http://127.0.0.1:3000",
+];
+// À améliorer en prod avec whitelist stricte et env vars
+```
 
 ---
 
@@ -700,77 +821,333 @@ CREATE UNIQUE INDEX ON documents (parent_id, name);
 ### 1. Authentification
 
 **Register** :
-1. Validation email + mot de passe
-2. Hash du mot de passe (bcrypt)
-3. Création utilisateur en base
-4. Génération JWT
-5. Stockage dans cookie
+1. Validation email (format + unicité)
+2. Validation mot de passe (min 8 chars)
+3. Hash du mot de passe (bcrypt, rounds=10)
+4. Création utilisateur en base
+5. Génération JWT
+6. Stockage dans cookie HttpOnly
 
 **Login** :
-1. Vérification email/password
-2. Si 2FA activé → demande code TOTP
-3. Sinon → génération JWT
-4. Stockage dans cookie
+1. Vérification email existe
+2. Vérification utilisateur non bloqué
+3. Vérification mot de passe (bcrypt)
+4. Si 2FA activé : Retour status 403 + demande code
+5. Sinon : Génération JWT + stockage cookie
 
-**2FA** :
-1. Setup : Génération secret + QR code
-2. Activate : Vérification code TOTP + activation
-3. Login : Vérification code à chaque connexion
-4. Disable : Désactivation + suppression secret
+**2FA Setup** :
+1. Génération secret Speakeasy
+2. Création QR code
+3. Retour au frontend pour scan
+
+**2FA Activate** :
+1. Vérification code TOTP (token fourni au step 1)
+2. Activation dans DB (is_two_factor_enabled = true)
+3. Secret stocké définitivement
+
+**2FA Verify (Login)** :
+1. Vérification code TOTP fourni
+2. Génération JWT si code valide
+3. Retour 440 si code invalide
+
+**2FA Disable** :
+1. Suppression secret (two_factor_secret = null)
+2. Désactivation (is_two_factor_enabled = false)
 
 ### 2. Gestion Documentaire
 
 **Hiérarchie** :
 - Dossiers peuvent contenir dossiers et fichiers
-- Documents texte éditables
+- Documents textes éditables en collaborative
 - Fichiers uploadés (images, PDF, etc.)
+- Support d'une profondeur illimitée
 
 **CRUD** :
-- Create : Création dossier/document/fichier
-- Read : Liste + détails
-- Update : Modification nom/contenu
-- Delete : Suppression (cascade sur enfants)
+- **Create** : POST `/api/documents` (dossier/texte) ou POST `/api/documents/file` (fichier)
+- **Read** : GET `/api/documents` (hiérarchique) ou GET `/api/documents/:id`
+- **Update** : PUT `/api/documents/:id` (contenu texte) ou PUT `/api/documents/:id/metadata` (nom/position)
+- **Delete** : DELETE `/api/documents/:id` (cascade sur enfants)
 
 **Permissions** :
 - Propriétaire : Tous droits
-- Éditeur : Peut modifier
+- Éditeur : Peut modifier contenu, ajouter au chat
 - Lecteur : Lecture seule
-- Invitation : Ajout de collaborateurs
+- Invitation : Propriétaire peut partager via email
+
+**Déplacement** :
+- Via `PUT /api/documents/:id/metadata` avec `parent_id`
+- Validation que parent existe et est un dossier
+- Support du déplacement vers racine (parent_id = null)
 
 ### 3. Collaboration Temps Réel
 
 **Édition collaborative** :
-- Plusieurs utilisateurs sur même document
-- Synchronisation via WebSocket
-- Sauvegarde périodique en base
+- Plusieurs utilisateurs sur même document texte
+- Synchronisation via WebSocket (événements doc-change)
+- Sauvegarde périodique en base (après édition)
+- Delta/diff pour optimiser la bande passante (optionnel)
 
 **Chat** :
 - Messages par session de collaboration
-- Réactions emoji sur messages
+- Réactions emoji sur messages (stored in DB ou en-mémoire)
 - Historique persisté en base
+- Auteur du message enregistré
 
 **Présence** :
-- Liste des participants connectés
+- Liste des participants connectés (in-memory en WebSocket)
 - Notifications join/leave
+- Curseurs des collaborateurs (position du curseur texte)
 
 ### 4. Profil Utilisateur
 
 **Modification** :
-- Nom : Changement avec validation
-- Email : Changement avec vérification format + unicité
-- Mot de passe : Minimum 8 caractères
+- **Nom** : Changement avec validation (non vide)
+- **Email** : Changement avec vérification format + unicité
+- **Mot de passe** : Minimum 8 caractères, bcrypt hash
 
-**2FA** :
+**2FA Management** :
 - Activation/désactivation
 - QR code pour setup
 - Codes TOTP 6 chiffres
+- Page dédiée `/profile/2fa`
 
 ### 5. Administration
 
 **Gestion utilisateurs** :
 - Liste de tous les utilisateurs
-- Création de comptes admin
-- Panel dédié (route protégée)
+- Création de comptes (admin/user)
+- Blocage/déblocage de comptes
+- Changement de mot de passe
+- Panel dédié (route protégée `GET /admin`)
+
+**Actions admin** :
+- `POST /api/admin/users` : Créer utilisateur
+- `PUT /api/admin/users/:id/block` : Bloquer
+- `PUT /api/admin/users/:id/unblock` : Débloquer
+- `PUT /api/admin/changepassword` : Changer pwd
+
+---
+
+## Flux d'Exécution
+
+### 1. Inscription et Première Connexion
+
+```
+Frontend
+├─ Remplir form (email, password)
+├─ POST /api/auth/register
+└─ Backend
+   ├─ Validation email format & unicité
+   ├─ Hash password (bcrypt)
+   ├─ INSERT user en DB
+   ├─ Générer JWT
+   └─ Set-Cookie: authentication=JWT (HttpOnly)
+
+Frontend reçoit 201
+├─ Afficher message succès
+└─ Rediriger vers /login
+```
+
+### 2. Login Standard
+
+```
+Frontend
+├─ Remplir form (email, password)
+├─ POST /api/auth/login
+└─ Backend
+   ├─ Récupérer user par email
+   ├─ Vérifier is_blocked
+   ├─ Vérifier password (bcrypt)
+   ├─ Si 2FA activé
+   │  └─ Retourner 403 (redirect /profile/2fa)
+   └─ Sinon
+      ├─ Générer JWT
+      └─ Set-Cookie: authentication=JWT (HttpOnly)
+
+Frontend reçoit 200
+├─ Sauvegarder token non-HttpOnly
+└─ Rediriger vers /documents
+```
+
+### 3. Login avec 2FA
+
+```
+Frontend /login
+├─ POST /api/auth/login
+└─ Reçoit 403
+   ├─ Rediriger vers /profile/2fa
+   └─ Afficher form code TOTP
+
+Frontend /profile/2fa
+├─ Remplir code (6 chiffres)
+├─ POST /api/auth/verify-2fa
+└─ Backend
+   ├─ Récupérer user par email/password (re-authentifier)
+   ├─ Vérifier code TOTP (Speakeasy)
+   ├─ Si valide
+   │  ├─ Générer JWT
+   │  └─ Set-Cookie: authentication=JWT (HttpOnly)
+   └─ Sinon retourner 440
+
+Frontend reçoit 200
+├─ Rediriger vers /documents
+```
+
+### 4. Accès Document avec Permissions
+
+```
+Frontend /documents
+├─ GET /api/documents
+└─ Backend
+   ├─ Récupérer user depuis JWT (req.userId)
+   ├─ Query hiérarchique : documents owner + permissions
+   └─ Retourner avec structure parent-enfants
+
+Frontend affiche liste hiérarchique
+├─ Cliquer sur document
+├─ GET /api/documents/:id
+└─ Backend
+   ├─ Vérifier permission (read|edit|owner)
+   ├─ Récupérer détails + owner info
+   └─ Retourner 200 ou 403
+
+Frontend affiche document
+```
+
+### 5. Édition Collaborative
+
+```
+Frontend /documents/[id]
+├─ GET /api/documents/:id (permissions)
+├─ ConnectSocket (WebSocket)
+├─ socket.emit('join-document', { docId })
+└─ Backend WebSocket
+   ├─ Vérifier permission (via canAccessDocument)
+   ├─ Charger état initial (loadDocumentSnapshot)
+   ├─ Ajouter socket à room: document:{docId}
+   └─ Broadcast 'presence' (présence utilisateur)
+
+Frontend reçoit initialState
+├─ Charger contenu
+└─ Afficher dans textarea
+
+Frontend (Utilisateur A édite)
+├─ Change contenu textarea
+├─ socket.emit('doc-change-client', { docId, delta })
+└─ Backend WebSocket
+   ├─ Sauvegarder delta en DB (UPDATE documents.content)
+   ├─ Broadcast 'doc-change-from-other-client:end' à la room
+   └─ Callback au client: { ok: true, delta }
+
+Frontend (Utilisateur B connecté)
+├─ Reçoit 'doc-change-from-other-client:end'
+├─ Appliquer delta au contenu local
+└─ Mettre à jour affichage
+```
+
+### 6. Chat Collaboration
+
+```
+Frontend (Collaborateur envoie message)
+├─ Remplir textarea message
+├─ POST /api/messages/:sessionId
+└─ Backend
+   ├─ Créer message en DB
+   ├─ Récupérer author info
+   └─ Retourner message avec détails
+
+Backend WebSocket
+├─ Broadcast 'chat:new-message' à la room
+└─ Inclure: { id, content, user_id, authorName, created_at }
+
+Frontend (Tous les collaborateurs)
+├─ Reçoivent 'chat:new-message'
+└─ Ajouter message à liste locale
+```
+
+### 7. Inviter Collaborateur
+
+```
+Frontend (Propriétaire)
+├─ Ouvrir modal "Inviter"
+├─ Remplir email + permission (read|edit)
+├─ POST /api/documents/:id/invite
+└─ Backend
+   ├─ Vérifier permission: owner uniquement
+   ├─ Récupérer user par email
+   ├─ Upsert dans document_permissions
+   ├─ Ajouter permissions parents (read) récursivement
+   └─ Retourner 201
+
+Frontend reçoit succès
+├─ Afficher notification
+└─ Rafraichir liste participants
+```
+
+### 8. Profil & 2FA Setup
+
+```
+Frontend /profile
+├─ GET /api/profile
+└─ Backend
+   ├─ Récupérer user depuis JWT
+   └─ Retourner { id, name, email, role, is_two_factor_enabled }
+
+Frontend affiche données
+├─ Option: "Activer 2FA"
+├─ POST /api/profile/2fa-setup
+└─ Backend
+   ├─ Générer secret (Speakeasy)
+   ├─ Créer QR code
+   └─ Retourner { secret, qrCodeDataURL }
+
+Frontend affiche QR code
+├─ Utilisateur scanne avec app (Google Authenticator, etc.)
+├─ Remplir code de vérification
+├─ POST /api/profile/2fa-activate
+└─ Backend
+   ├─ Vérifier code TOTP (secret temporaire)
+   ├─ Activer is_two_factor_enabled = true
+   ├─ Sauvegarder secret permanent
+   └─ Retourner succès
+
+Frontend affiche "2FA activé"
+```
+
+---
+
+## Variables d'Environnement
+
+### Backend (`.env` racine)
+
+```bash
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_NAME=wikidrive
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+
+# Ports
+API_PORT=3000
+WS_PORT=3001
+
+# Upload
+MAX_FILE_SIZE=52428800  # 50MB
+
+# 2FA
+TOTP_WINDOW=1
+```
+
+### Frontend (`.env.local` dev, `.env.production` prod)
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_WS_URL=http://localhost:3001
+```
 
 ---
 
@@ -784,5 +1161,3 @@ CREATE UNIQUE INDEX ON documents (parent_id, name);
 Projet réalisé dans le cadre de la formation **LiveCampus** - Spécialité Développement Web.
 
 ---
-
-**Date** : Octobre 2025
