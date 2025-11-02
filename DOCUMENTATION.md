@@ -158,9 +158,9 @@ projet_spe_4/
 │   - Locale: FR                     │
 └────────┬────────────────────────────┘
          │
-         ├──────────────┬──────────────┐
-         │              │              │
-         ▼              ▼              ▼
+         ├──────────────┬
+         │              │              
+         ▼              ▼              
 ┌─────────────┐ ┌──────────────┐ ┌────────────┐
 │  Backend    │ │   Backend    │ │ PostgreSQL │
 │  API        │ │  WebSocket   │ │   (5432)   │
@@ -171,9 +171,9 @@ projet_spe_4/
 │ - JWT      │ │ - Chat       │       │
 │ - Swagger  │ │ - Collab     │       │
 │ - Multer   │ │ - Présence   │       │
-└─────────────┘ └──────┬───────┘       │
-       │                │              │
-       └────────────────┴──────────────┘
+└─────────────┘ └──────  ─────┘       │
+       │                              │
+       └─────────────────────────────┘
 ```
 
 ---
@@ -217,7 +217,7 @@ projet_spe_4/
 
 **Raisons** :
 - **Sequelize** : Pour models, associations, et CRUD standards
-- **Pool brut** : Pour requêtes complexes (hiérarchie, CTEs, etc.)
+- **Pool brut** : Pour des requêtes SQL
 - **Flexibilité** : Choisir l'outil le plus approprié par besoin
 
 ### 5. Gestion des Variables d'Environnement
@@ -250,7 +250,7 @@ projet_spe_4/
 - **Robustesse** : Base de données relationnelle éprouvée
 - **ACID** : Garanties transactionnelles
 - **Types avancés** : Support des ENUM, UUID, JSON
-- **Performance** : Optimisations pour les requêtes complexes
+- **Performance** : Optimisations pour les requêtes
 - **CTEs récursives** : Pour hiérarchies de documents
 
 #### Sequelize ORM + PostgreSQL Pool
@@ -260,25 +260,13 @@ projet_spe_4/
 - **Migrations** : Gestion des changements de schéma
 - **Validation** : Validation des données au niveau modèle
 - **Relations** : Gestion simple des associations
-- **Pool brut** : Pour requêtes complexes (hiérarchies)
-
-**Configuration** :
-```javascript
-// Pool de connexions pour optimiser les performances
-pool: {
-    max: 10,
-    min: 2,
-    acquire: 30000,
-    idle: 10000
-}
-```
+- **Pool brut** : Pour des requêtes SQL manuels
 
 ### 2. Stack Frontend
 
 #### Next.js 14 (App Router)
 
 **Raisons** :
-- **SSR/SSG** : Optimisation SEO et performances
 - **App Router** : Nouveau système de routing plus puissant
 - **Server Components** : Réduction du JavaScript côté client
 - **Middleware** : Protection des routes native
@@ -313,23 +301,184 @@ pool: {
 
 **Événements implémentés** :
 
-```javascript
-// Client → Serveur
-socket.on('join-document', ({ docId }, callback)     // Rejoindre un document
-socket.on('leave-document', ({ docId }, callback)    // Quitter un document
-socket.on('doc-change-client', ({ docId, delta }, callback)  // Édition
-socket.on('message', { sessionId, content })         // Message de chat
-socket.on('reaction', { messageId, emoji })          // Réaction emoji
+## Événements WebSocket - Documentation Complète
 
-// Serveur → Client
-socket.on('doc-change-from-other-client:launch', ...)     // Édition lancée
-socket.on('doc-change-from-other-client:end', ...)        // Édition finalisée
-socket.on('presence', { type, userId, ... })             // Présence utilisateur
-socket.on('chat:new-message', (message) => {})           // Nouveau message
-socket.on('chat:reaction', (reaction) => {})             // Nouvelle réaction
-socket.on('position-update', (positions) => {})          // Curseurs des collaborateurs
-socket.on('document:saved', (payload) => {})             // Document sauvegardé
-socket.on('message', (payload) => {})                     // Message de présence
+### 🔵 Client → Serveur
+
+#### Authentification
+```javascript
+// Handshake automatique via middleware
+socket.handshake.auth = { token: JWT_TOKEN }
+```
+
+#### Documents
+```javascript
+socket.emit('join-document', { docId }, (response) => {
+  // response: { ok, docId, membersCount, initialState, reactions }
+})
+
+socket.emit('leave-document', { docId }, (response) => {
+  // response: { ok, docId, membersCount, reactions }
+})
+
+socket.emit('doc-change-client', { docId, delta }, (response) => {
+  // delta: { newText: { text: "contenu" } }
+  // response: { ok, delta, userId }
+})
+```
+
+#### Chat
+```javascript
+socket.emit('chat:new-message', { docId, message }, (response) => {
+  // message: { id?, content: "texte" }
+  // response: { ok, message: { id, content, user_id, author, reactions } }
+})
+
+socket.emit('chat:react', { docId, messageId, emoji }, (response) => {
+  // emoji: "👍"
+  // response: { ok, reaction: { docId, messageId, emoji, userIds } }
+})
+
+socket.emit('chat:new-audio', { docId, data }, (response) => {
+  // data: audio blob/buffer
+  // response: { ok }
+})
+```
+
+#### Présence
+```javascript
+socket.emit('position-update', { docId, userId, start, end, direction }, (response) => {
+  // start: 5, end: 10, direction: "forward"|"backward"|"none"
+  // response: { ok }
+})
+
+socket.emit('ping', ...)
+// Réponse: 'pong'
+```
+
+---
+
+### 🔴 Serveur → Client (Broadcasts)
+
+#### Documents & Édition
+```javascript
+socket.on('doc-change-from-other-client:launch', ({ docId, delta, userId }) => {
+  // Édition lancée par un autre utilisateur
+  // Avant sauvegarde
+})
+
+socket.on('doc-change-from-other-client:end', ({ ok, docId, delta, userId }) => {
+  // Édition finalisée et sauvegardée
+  // ok: true/false selon succès DB
+})
+
+socket.on('document:saved', (doc) => {
+  // Document complet sauvegardé en DB
+  // { id, name, content, last_modified_at, last_modified_by_id, ... }
+})
+```
+
+#### Chat
+```javascript
+socket.on('chat:new-message', ({ docId, message }) => {
+  // message: { id, content, user_id, author, reactions, ... }
+})
+
+socket.on('chat:reaction', ({ docId, messageId, emoji, userIds }) => {
+  // userIds: liste des user_id ayant réagi avec cet emoji
+})
+
+socket.on('chat:new-audio', ({ docId, data }) => {
+  // Données audio d'un autre utilisateur
+})
+```
+
+#### Présence
+```javascript
+socket.on('presence', ({ type, userId, socketId, membersCount }) => {
+  // type: "joined" | "left"
+  // membersCount: nombre de participants après l'action
+})
+
+socket.on('position-update', ({ docId, userId, start, end, direction }) => {
+  // Position du curseur des collaborateurs en temps réel
+})
+
+socket.on('pong', ...)
+// Réponse au ping
+```
+
+---
+
+### 📊 Architecture
+
+**Rooms** :
+```
+document:{docId}  // Une room par document
+```
+
+**Stockage Réactions** :
+```javascript
+// EN MÉMOIRE UNIQUEMENT (perdu au restart)
+reactionStore = Map<docId, Map<messageId, Map<emoji, Set<userId>>>>
+```
+
+**Authentification** :
+- Token vérifié au handshake
+- `socket.user = { id, email, token }`
+- Injectionné dans tous les événements
+
+---
+
+### ⚠️ Codes d'Erreur
+
+| Raison | Cause |
+|--------|-------|
+| `unauthorized` | Token invalide/expiré |
+| `missing_docId` | docId manquant |
+| `forbidden` | Pas de permission d'accès |
+| `not_exist` | Document inexistant |
+| `not_joined` | Pas dans la room |
+| `unsupported_document_type` | Type document ≠ 'text' |
+| `invalid_payload` | Champs manquants/invalides |
+| `invalid_informations` | Données invalides |
+| `invalid_emoji` | Emoji vide |
+| `internal_error` | Erreur serveur |
+
+---
+
+### 💡 Flux Typique
+
+```javascript
+// 1. Rejoindre
+socket.emit('join-document', { docId }, (res) => {
+  console.log('Joined:', res.initialState.content)
+})
+
+// 2. Éditer
+socket.on('doc-change-from-other-client:launch', (data) => {
+  console.log('User', data.userId, 'is editing')
+})
+
+// 3. Changer position curseur
+socket.emit('position-update', { 
+  docId, userId, start: 5, end: 10, direction: 'forward' 
+})
+
+// 4. Envoyer message
+socket.emit('chat:new-message', { 
+  docId, message: { content: 'Hello!' } 
+}, (res) => {
+  console.log('Message sent:', res.message.id)
+})
+
+// 5. Réagir
+socket.emit('chat:react', { 
+  docId, messageId: '123', emoji: '👍' 
+})
+
+// 6. Quitter
+socket.emit('leave-document', { docId })
 ```
 
 ### 4. Authentification
@@ -567,27 +716,6 @@ PUT    /api/admin/changepassword    # Changer mot de passe d'un utilisateur
 - Gestion de la présence des participants
 - Messages de chat instantanés
 - Réactions emoji
-
-**Événements** :
-
-```javascript
-// Client → Serveur
-socket.on('join-document', { docId }, callback)
-socket.on('leave-document', { docId }, callback)
-socket.on('doc-change-client', { docId, delta }, callback)
-socket.on('message', { sessionId, content })
-socket.on('reaction', { messageId, emoji })
-
-// Serveur → Client (broadcast)
-socket.on('doc-change-from-other-client:launch', { docId, delta, userId })
-socket.on('doc-change-from-other-client:end', { ok, docId, delta, userId })
-socket.on('presence', { type, userId, displayName, ... })
-socket.on('chat:new-message', (message))
-socket.on('chat:reaction', (reaction))
-socket.on('position-update', (positions))
-socket.on('document:saved', (payload))
-socket.on('message', (payload))  // Présence générale
-```
 
 ### Frontend (Port 3000 / Dev)
 
@@ -928,193 +1056,6 @@ const CORS_ORIGINS = [
 
 ---
 
-## Flux d'Exécution
-
-### 1. Inscription et Première Connexion
-
-```
-Frontend
-├─ Remplir form (email, password)
-├─ POST /api/auth/register
-└─ Backend
-   ├─ Validation email format & unicité
-   ├─ Hash password (bcrypt)
-   ├─ INSERT user en DB
-   ├─ Générer JWT
-   └─ Set-Cookie: authentication=JWT (HttpOnly)
-
-Frontend reçoit 201
-├─ Afficher message succès
-└─ Rediriger vers /login
-```
-
-### 2. Login Standard
-
-```
-Frontend
-├─ Remplir form (email, password)
-├─ POST /api/auth/login
-└─ Backend
-   ├─ Récupérer user par email
-   ├─ Vérifier is_blocked
-   ├─ Vérifier password (bcrypt)
-   ├─ Si 2FA activé
-   │  └─ Retourner 403 (redirect /profile/2fa)
-   └─ Sinon
-      ├─ Générer JWT
-      └─ Set-Cookie: authentication=JWT (HttpOnly)
-
-Frontend reçoit 200
-├─ Sauvegarder token non-HttpOnly
-└─ Rediriger vers /documents
-```
-
-### 3. Login avec 2FA
-
-```
-Frontend /login
-├─ POST /api/auth/login
-└─ Reçoit 403
-   ├─ Rediriger vers /profile/2fa
-   └─ Afficher form code TOTP
-
-Frontend /profile/2fa
-├─ Remplir code (6 chiffres)
-├─ POST /api/auth/verify-2fa
-└─ Backend
-   ├─ Récupérer user par email/password (re-authentifier)
-   ├─ Vérifier code TOTP (Speakeasy)
-   ├─ Si valide
-   │  ├─ Générer JWT
-   │  └─ Set-Cookie: authentication=JWT (HttpOnly)
-   └─ Sinon retourner 440
-
-Frontend reçoit 200
-├─ Rediriger vers /documents
-```
-
-### 4. Accès Document avec Permissions
-
-```
-Frontend /documents
-├─ GET /api/documents
-└─ Backend
-   ├─ Récupérer user depuis JWT (req.userId)
-   ├─ Query hiérarchique : documents owner + permissions
-   └─ Retourner avec structure parent-enfants
-
-Frontend affiche liste hiérarchique
-├─ Cliquer sur document
-├─ GET /api/documents/:id
-└─ Backend
-   ├─ Vérifier permission (read|edit|owner)
-   ├─ Récupérer détails + owner info
-   └─ Retourner 200 ou 403
-
-Frontend affiche document
-```
-
-### 5. Édition Collaborative
-
-```
-Frontend /documents/[id]
-├─ GET /api/documents/:id (permissions)
-├─ ConnectSocket (WebSocket)
-├─ socket.emit('join-document', { docId })
-└─ Backend WebSocket
-   ├─ Vérifier permission (via canAccessDocument)
-   ├─ Charger état initial (loadDocumentSnapshot)
-   ├─ Ajouter socket à room: document:{docId}
-   └─ Broadcast 'presence' (présence utilisateur)
-
-Frontend reçoit initialState
-├─ Charger contenu
-└─ Afficher dans textarea
-
-Frontend (Utilisateur A édite)
-├─ Change contenu textarea
-├─ socket.emit('doc-change-client', { docId, delta })
-└─ Backend WebSocket
-   ├─ Sauvegarder delta en DB (UPDATE documents.content)
-   ├─ Broadcast 'doc-change-from-other-client:end' à la room
-   └─ Callback au client: { ok: true, delta }
-
-Frontend (Utilisateur B connecté)
-├─ Reçoit 'doc-change-from-other-client:end'
-├─ Appliquer delta au contenu local
-└─ Mettre à jour affichage
-```
-
-### 6. Chat Collaboration
-
-```
-Frontend (Collaborateur envoie message)
-├─ Remplir textarea message
-├─ POST /api/messages/:sessionId
-└─ Backend
-   ├─ Créer message en DB
-   ├─ Récupérer author info
-   └─ Retourner message avec détails
-
-Backend WebSocket
-├─ Broadcast 'chat:new-message' à la room
-└─ Inclure: { id, content, user_id, authorName, created_at }
-
-Frontend (Tous les collaborateurs)
-├─ Reçoivent 'chat:new-message'
-└─ Ajouter message à liste locale
-```
-
-### 7. Inviter Collaborateur
-
-```
-Frontend (Propriétaire)
-├─ Ouvrir modal "Inviter"
-├─ Remplir email + permission (read|edit)
-├─ POST /api/documents/:id/invite
-└─ Backend
-   ├─ Vérifier permission: owner uniquement
-   ├─ Récupérer user par email
-   ├─ Upsert dans document_permissions
-   ├─ Ajouter permissions parents (read) récursivement
-   └─ Retourner 201
-
-Frontend reçoit succès
-├─ Afficher notification
-└─ Rafraichir liste participants
-```
-
-### 8. Profil & 2FA Setup
-
-```
-Frontend /profile
-├─ GET /api/profile
-└─ Backend
-   ├─ Récupérer user depuis JWT
-   └─ Retourner { id, name, email, role, is_two_factor_enabled }
-
-Frontend affiche données
-├─ Option: "Activer 2FA"
-├─ POST /api/profile/2fa-setup
-└─ Backend
-   ├─ Générer secret (Speakeasy)
-   ├─ Créer QR code
-   └─ Retourner { secret, qrCodeDataURL }
-
-Frontend affiche QR code
-├─ Utilisateur scanne avec app (Google Authenticator, etc.)
-├─ Remplir code de vérification
-├─ POST /api/profile/2fa-activate
-└─ Backend
-   ├─ Vérifier code TOTP (secret temporaire)
-   ├─ Activer is_two_factor_enabled = true
-   ├─ Sauvegarder secret permanent
-   └─ Retourner succès
-
-Frontend affiche "2FA activé"
-```
-
----
 
 ## Variables d'Environnement
 
