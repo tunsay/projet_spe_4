@@ -1,5 +1,5 @@
 import { DocumentDetail } from "@/types/documents";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface DocumentTextSectionProps {
     document: DocumentDetail;
