@@ -1503,7 +1503,7 @@ router.post("/:id/invite", async (req, res) => {
           console.log("Document non trouvé. Son id est :", document_id)
           return;
         }
-        await DocumentPermission.create({
+        await DocumentPermission.upsert({
           document_id: document_id,
           user_id : user_id,
           permission : "read"
