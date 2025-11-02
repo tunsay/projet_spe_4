@@ -316,6 +316,26 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("chat:new-audio", async ({ docId, data }, cb) => {
+        try {
+            if (!docId || !data) {
+                return respond({ ok: false, reason: "invalid_informations" }, cb)
+            }
+
+            const room = `document:${docId}`;
+            if (!socket.rooms.has(room)) {
+                console.log("user", socket.id, "new audio rejected (not in room)", room);
+                return respond({ ok: false, reason: "not_joined" }, cb);
+            }
+            socket.to(room).emit("chat:new-audio", { docId, data })
+            return respond({ ok: true }, cb);
+        } catch (error) {
+            console.error("Error in position-update:", error);
+            return respond({ ok: false, reason: "internal_error" }, cb);
+        }
+
+    })
+
     socket.on("position-update", async ({ docId, userId, start, end, direction }, cb) => {
         try {
             console.log("position-update received for docId:", docId, "by user:", socket.user?.id);

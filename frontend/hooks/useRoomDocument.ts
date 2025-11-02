@@ -7,6 +7,7 @@ import {
     SaveState,
     SessionParticipantEntry
 } from "@/types/documents";
+import toBase64 from "@/utils/toBase64";
 import { fetchParticipants } from "@/api/participant";
 
 type InitialState = DocumentDetail;
@@ -440,6 +441,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         socket.on("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
         socket.on("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
         socket.on("document:saved", handleDocumentSaved);
+        socket.on("chat:new-audio", handleIncomingAudio);
         socket.on("position-update", handlePositionUpdate);
         socket.on("chat:new-message", handleIncomingMessage);
         socket.on("chat:reaction", handleIncomingReaction);
@@ -456,6 +458,7 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
                 socket.off("doc-change-from-other-client:launch", docChangeFromOtherClientLaunch);
                 socket.off("doc-change-from-other-client:end", docChangeFromOtherClientEnd);
                 socket.off("document:saved", handleDocumentSaved);
+                socket.off("chat:new-audio", handleIncomingAudio);
                 socket.off("position-update", handlePositionUpdate);
                 socket.off("chat:new-message", handleIncomingMessage);
                 socket.off("chat:reaction", handleIncomingReaction);
@@ -563,6 +566,161 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         },
         [socket, documentId]
     )
+    
+    async function playBlobAudio(ctx: AudioContext, arrayBuffer: ArrayBuffer) {
+        // try modern promise form first, with slice(0) to avoid view/offset problems
+        try {
+            let audioBuffer: AudioBuffer;
+            try {
+                audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+            } catch (e) {
+                // older Safari / weird implementations: use callback form
+                audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+                    try {
+                        ctx.decodeAudioData(
+                            arrayBuffer.slice(0),
+                            (buf) => resolve(buf),
+                            (err) => reject(err)
+                        );
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = audioBuffer;
+            src.connect(ctx.destination);
+            src.start();
+        } catch (err) {
+            // rethrow so caller can fallback to blob playback
+            throw err;
+        }
+    }
+
+
+function normalizeIncomingToArrayBuffer(data: unknown): ArrayBuffer | null {
+    if (!data) return null;
+    // native ArrayBuffer
+    if (data instanceof ArrayBuffer) return data;
+    // TypedArray / DataView
+    if (ArrayBuffer.isView(data)) {
+        const view = data as ArrayBufferView;
+         const buf = view.buffer;
+        // If it's a plain ArrayBuffer we can slice the needed region directly
+        if (buf instanceof ArrayBuffer) {
+            return buf.slice(view.byteOffset, view.byteOffset + view.byteLength);
+        }
+        // If it's a SharedArrayBuffer (or other) make a copy into a new ArrayBuffer
+        try {
+            const copy = new Uint8Array(view.byteLength);
+            copy.set(new Uint8Array(buf as any, view.byteOffset, view.byteLength));
+            return copy.buffer;
+        } catch (e) {
+            return null;
+        }
+    }
+    // socket.io may serialize Node Buffer as { type: 'Buffer', data: [...] }
+    if (typeof data === "object" && (data as any).data && Array.isArray((data as any).data)) {
+        try {
+            const u8 = new Uint8Array((data as any).data);
+            return u8.buffer;
+        } catch (e) {
+            return null;
+        }
+    }
+    // base64 string
+    if (typeof data === "string") {
+        try {
+            const b64 = data.includes(",") ? data.split(",").pop()! : data;
+            const binary = atob(b64);
+            const len = binary.length;
+            const u8 = new Uint8Array(len);
+            for (let i = 0; i < len; i++) u8[i] = binary.charCodeAt(i);
+            return u8.buffer;
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+    const handleIncomingAudio = async ({ docId, data }: { docId: string, data: string }) => {
+        if (docId !== documentId) {
+            return;
+        }
+        if (typeof window === "undefined") return;
+        const AudioContextCtor =
+            window.AudioContext ||
+            (window as unknown as {
+                webkitAudioContext?: typeof AudioContext;
+            }).webkitAudioContext;
+        if (!AudioContextCtor) return;
+
+        if (
+            !audioContextRef.current ||
+            audioContextRef.current.state === "closed"
+        ) {
+            try {
+                audioContextRef.current = new AudioContextCtor();
+            } catch (error) {
+                audioContextRef.current = null;
+            }
+        }
+
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+
+        if (ctx.state === "suspended") {
+            ctx.resume().catch(() => { });
+        }
+
+        try {
+            console.log("lecture data", typeof data, data, "data");
+            const arrayBuffer = normalizeIncomingToArrayBuffer(data);
+            console.log("arrayBuffer", arrayBuffer);
+
+            if (arrayBuffer) {
+                try {
+                    await playBlobAudio(ctx, arrayBuffer);
+                    return;
+                } catch (err) {
+                    // decoding failed — fallthrough to Blob fallback
+                    console.warn("decodeAudioData failed, falling back to blob playback:", err);
+                }
+            }
+        } catch (error) {
+            console.log("Erreur de lecture audio entrante :", error);
+            // ignore audio errors (autoplay restrictions, etc.)
+        }
+    };
+
+    const sendAudio = useCallback(
+        async (
+            docId : string,
+            data : Blob
+        ): Promise<boolean> => {
+            if (!socket) return await Promise.reject(new Error("no-socket"));
+            if (!docId) return await Promise.reject(new Error("no-doc"));
+            const base64 = await toBase64(data);
+            console.log(`Le blob audio est : ${data} : type ${typeof data}, data.type: ${data.type}, size ${data.size}`, "base64", base64, "base64 type", typeof base64);
+            return new Promise<boolean>((resolve, reject) => {
+                try {
+                    socket.emit(
+                        "chat:new-audio",
+                        { docId: docId, data: base64 },
+                        (ack: any) => {
+                            if (ack && ack.ok === true) {
+                                return resolve(true);
+                            }
+                            return reject(false)
+                        }
+                    );
+                } catch (e) {
+                    return reject(e as Error);
+                }
+            })
+        }, [socket]
+    ); 
 
     const handleIncomingMessage = (payload: unknown) => {
         if (!payload || typeof payload !== "object" || !("docId" in payload)) {
@@ -780,6 +938,8 @@ export default function useRoomDocument(socket: Socket | null, documentId: strin
         sendNewPosition,
         handleIncomingMessage,
         sendMessage,
+        handleIncomingAudio,
+        sendAudio,
         toggleReaction,
         messagesList,
         participants,

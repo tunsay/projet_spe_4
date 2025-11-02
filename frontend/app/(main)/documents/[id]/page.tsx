@@ -30,6 +30,7 @@ import {
     sortMessagesByDate,
     normalizeErrorMessage,
 } from "@/utils/message";
+import CallCollaboration from "../_components/CallCollaboration";
 
 const MESSAGE_EMOJI_CHOICES = [
     "😀",
@@ -69,6 +70,7 @@ export default function DocumentDetailPage() {
         messagesList,
         setMessagesList,
         sendMessage,
+        sendAudio,
         toggleReaction,
         currentSelection,
         setCurrentSelection,
@@ -828,6 +830,8 @@ export default function DocumentDetailPage() {
                 </div>
             </div>
 
+            <CallCollaboration documentId={doc?.id} sendAudio={sendAudio} />
+            
             <InviteCollaboratorModal
                 isOpen={isInviteModalOpen}
                 inviteEmail={inviteEmail}
