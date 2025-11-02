@@ -717,7 +717,7 @@ PUT    /api/admin/changepassword    # Changer mot de passe d'un utilisateur
 - Messages de chat instantanés
 - Réactions emoji
 
-### Frontend (Port 3000 / Dev)
+### Frontend (Port 8081 / Dev)
 
 **Responsabilités** :
 - Interface utilisateur (React + TypeScript)
@@ -841,7 +841,6 @@ User 1───N Message
 
 ```sql
 -- Performance pour les requêtes fréquentes
-CREATE UNIQUE INDEX ON documents (parent_id, name);
 CREATE INDEX ON document_permissions (user_id);
 CREATE INDEX ON document_permissions (document_id);
 ```
@@ -1062,32 +1061,30 @@ const CORS_ORIGINS = [
 ### Backend (`.env` racine)
 
 ```bash
-# Database
-DB_HOST=localhost
+DB_USER=collaborator_service
+DB_PASSWORD=L!veC@mpus2025
+DB_HOST=db
 DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=yourpassword
-DB_NAME=wikidrive
-
-# JWT
-JWT_SECRET=your-super-secret-jwt-key-min-32-chars
-
-# Ports
+DB_NAME=wiki_collaboratif
 API_PORT=3000
+COOKIE_DOMAIN=localhost
+COOKIE_SECURE=true
+COOKIE_SAMESITE=Strict
+JWT_TTL=1h
+```
+### Backend-websocket (`.env` racine)
+
+```bash
+API_INTERNAL_URL=http://api:3000
 WS_PORT=3001
-
-# Upload
-MAX_FILE_SIZE=52428800  # 50MB
-
-# 2FA
-TOTP_WINDOW=1
+JWT_SECRET=your_super_secret_key_min_32_chars_here_2025
 ```
 
 ### Frontend (`.env.local` dev, `.env.production` prod)
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:3000
-NEXT_PUBLIC_WS_URL=http://localhost:3001
+NEXT_PUBLIC_WS_URL=ws://localhost:3001
 ```
 
 ---
