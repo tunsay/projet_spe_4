@@ -151,7 +151,7 @@ projet_spe_4/
          │
          ▼
 ┌─────────────────────────────────────┐
-│   Frontend (Next.js - Port 3000)    │
+│   Frontend (Next.js - Port 8081)    │
 │   - React Components (TypeScript)   │
 │   - Socket.IO Client                │
 │   - Middleware Auth (Next.js)       │
